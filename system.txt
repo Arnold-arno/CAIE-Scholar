@@ -1,0 +1,341 @@
+================================================================================
+  CAIE SCHOLAR — SYSTEM DOCUMENTATION
+  Project folder: KalzTunz/
+  Generated: 2026
+================================================================================
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 1 — SYSTEM ARCHITECTURE OVERVIEW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CAIE Scholar is a two-tier web application:
+
+  • Frontend  — React 18 + Vite + shadcn/ui (served by Nginx in production)
+  • Backend   — FastAPI + Gunicorn (Python 3.12, async I/O via httpx)
+
+They communicate over HTTP/REST. The backend URL is injected at build time via
+the VITE_API_URL environment variable.
+
+Stack summary:
+  Frontend:   React, Vite, Tailwind CSS, shadcn/ui, Framer Motion, TanStack Query
+  Backend:    FastAPI, Gunicorn, Uvicorn workers, httpx, BeautifulSoup4, pypdf
+  Deployment: Docker Compose (local), Render.com (cloud), Nginx (static serving)
+  AI:         Claude claude-sonnet-4-6 API (AI notes generation, client-side call)
+  Sources:    pastpapers.papacambridge.com, www.gceguide.com, local disk store
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 2 — SYSTEM FLOW DIAGRAM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ┌─────────────────────────────────────────┐
+  │           User  (browser)               │
+  └──────────────────┬──────────────────────┘
+                     │ visits app
+                     ▼
+  ┌─────────────────────────────────────────┐
+  │         Login / Signup page             │
+  │   two-step form · email + password      │
+  └──────────────────┬──────────────────────┘
+                     │ authenticated
+                     ▼
+  ╔═════════════════════════════════════════════════════════════════╗
+  ║  React Frontend  (Vite + shadcn/ui)                            ║
+  ║                                                                 ║
+  ║  ┌──────────────┐  ┌──────────────────┐  ┌──────────────────┐ ║
+  ║  │  IGCSE suite │  │ AS/A-Level suite  │  │  O-Level suite   │ ║
+  ║  └──────┬───────┘  └────────┬─────────┘  └────────┬─────────┘ ║
+  ║         └──────────────────┬┴──────────────────────┘           ║
+  ║                            │ shared components                  ║
+  ║  ┌─────────────┐  ┌────────────────┐  ┌──────────────────────┐ ║
+  ║  │QuestionSearch│  │  PaperViewer   │  │  AINotesGenerator    │ ║
+  ║  └──────┬───────┘  └───────┬────────┘  └──────────┬───────────┘ ║
+  ║         │                  │                       │             ║
+  ║  ┌──────┴──────────────────┴───────────────────────┴──────────┐ ║
+  ║  │                usePaperSearch hook                          │ ║
+  ║  │          HTTP fetch · VITE_API_URL                          │ ║
+  ║  └─────────────────────────────────────────────────────────────┘ ║
+  ╚══════════════════════════════════════╦════════════════════════════╝
+                                         │ REST API calls
+                                         ▼
+  ╔═════════════════════════════════════════════════════════════════╗
+  ║  FastAPI Backend  (Gunicorn · Python 3.12)                     ║
+  ║                                                                 ║
+  ║  ┌─────────────┐ ┌─────────────┐ ┌──────────────┐ ┌─────────┐ ║
+  ║  │ /api/search │ │ /api/papers │ │/api/markschms│ │/api/dwld│ ║
+  ║  └──────┬──────┘ └──────┬──────┘ └──────┬───────┘ └────┬────┘ ║
+  ║         └───────────────┴───────────────┴───────────────┘      ║
+  ║                            │                                    ║
+  ║              ┌─────────────┴──────────────┐                    ║
+  ║              │                            │                    ║
+  ║  ┌───────────────────────┐  ┌─────────────────────────────┐   ║
+  ║  │  service_search.py    │  │     service_pdf.py           │   ║
+  ║  │  Orchestrates sources │  │  Fetch · cache · stream      │   ║
+  ║  └──────────┬────────────┘  └──────────────┬──────────────┘   ║
+  ║             │                              │                    ║
+  ║  ┌──────────┴───────┐         ┌────────────┴──────────┐        ║
+  ║  │  Scraper layer   │         │   Local store         │        ║
+  ║  │ ┌──────────────┐ │         │   data/papers/        │        ║
+  ║  │ │PapaCambridge │ │         │   data/markschemes/   │        ║
+  ║  │ ├──────────────┤ │         │   data/cache/         │        ║
+  ║  │ │  GCE Guide   │ │         └───────────────────────┘        ║
+  ║  │ └──────────────┘ │                                           ║
+  ║  └──────────────────┘                                           ║
+  ╚═════════════════════════════════════════════════════════════════╝
+             │                      │
+             ▼                      ▼
+  ┌──────────────────────┐  ┌───────────────────────┐
+  │ pastpapers.          │  │  www.gceguide.com      │
+  │ papacambridge.com    │  │  (HTML listing pages)  │
+  └──────────────────────┘  └───────────────────────┘
+
+Notes:
+  • Source priority: Local disk → PapaCambridge → GCE Guide
+  • PapaCambridge uses direct URL construction (fast, no HTML parsing needed)
+  • GCE Guide uses HTML parsing as fallback when PapaCambridge has no result
+  • All PDF responses are streamed directly to the browser as application/pdf
+  • Search results are cached for 1 hour (memory L1 + disk L2)
+  • Downloaded PDFs are cached indefinitely in data/papers/ or data/markschemes/
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 3 — DATA FLOW DIAGRAM  (Level 1 DFD)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Legend:
+  [ Entity   ]  = external entity (user, external website, API)
+  ( Process  )  = data transformation process
+  ═══════════   = data store
+  ──────────►   = data flow with label
+
+─────────────────────────────────────────────────────────────────────────────
+
+FLOW 1 — Authentication
+
+  [ Student ] ──── login / signup ──────────────► ( P1: Authenticate )
+                                                         │
+                                                    auth token
+                                                         │
+                                                         ▼
+                                               (session established)
+
+─────────────────────────────────────────────────────────────────────────────
+
+FLOW 2 — Paper search
+
+  [ Student ] ──── search query ─────────────────► ( P2: Search papers )
+                   (subject, year, season)                 │
+                                                     check cache
+                                                           │
+                                                           ▼
+                                            ═══════════════════════════════
+                                             D1  Search cache (JSON, disk)
+                                            ═══════════════════════════════
+                                                           │
+                                                   cache miss ──────────────► [ PapaCambridge ]
+                                                                                      │
+                                                                               paper URLs list
+                                                                                      │
+                                                             [ GCE Guide ] ◄─ fallback if needed
+                                                                                      │
+                                                          ◄──────── paper result list ┘
+                                                           │
+                                                    write to cache
+                                                           │
+                                                           ▼
+                                                   result list shown
+                                                   in frontend UI
+
+─────────────────────────────────────────────────────────────────────────────
+
+FLOW 3 — PDF viewing and download
+
+  [ Student ] ──── view / download paper ────────► ( P3: Serve PDF )
+                                                         │
+                                                   check D2 cache
+                                                         │
+                                            ═════════════════════════════════
+                                             D2  PDF cache (data/papers/ )
+                                            ═════════════════════════════════
+                                                         │
+                                               cache miss │
+                                                         │
+                                   fetch raw PDF bytes ◄─┘
+                                         │
+                       [ PapaCambridge / GCE Guide ] ──► PDF bytes
+                                         │
+                                   save to D2 ──────────► D2 (persist)
+                                         │
+                                  stream to browser
+                                  (application/pdf)
+                                         │
+                                         ▼
+                              [ Student views PDF inline ]
+                              [ Student downloads PDF    ]
+                              [ Mark scheme previewed    ]
+
+─────────────────────────────────────────────────────────────────────────────
+
+FLOW 4 — Study session tracking
+
+  [ Student ] ──── start timer ──────────────────► ( P4: Track session )
+                   (subject, preset duration)              │
+                                                    countdown tick
+                                                           │
+                                                   on complete / save
+                                                           │
+                                            ═══════════════════════════════
+                                             D3  Sessions (localStorage)
+                                            ═══════════════════════════════
+                                                           │
+                                                           ▼
+                                                  session history
+                                                  shown in timer UI
+
+─────────────────────────────────────────────────────────────────────────────
+
+FLOW 5 — AI study notes generation
+
+  [ Student ] ──── subject + topic ──────────────► ( P5: Generate notes )
+                                                         │
+                                              structured prompt built
+                                                         │
+                                                         ▼
+                                              [ Claude API (claude-sonnet-4-6) ]
+                                                         │
+                                                   JSON response
+                                                  (overview, subtopics,
+                                                   exam tips, questions)
+                                                         │
+                                            ═════════════════════════════════
+                                             D4  Generated notes (print/PDF)
+                                            ═════════════════════════════════
+                                                         │
+                                                         ▼
+                                          rendered in AINotesGenerator UI
+                                          printable HTML / browser PDF
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 4 — DATA STORES SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ID   Name                Format            Location              TTL
+  ──   ────────────────    ──────────        ────────────────────  ────────────
+  D1   Search cache        JSON files        backend/data/cache/   1 hour
+  D2   PDF / MS store      Binary PDF        backend/data/papers/  Permanent
+                                             backend/data/markschemes/
+  D3   Study sessions      JSON (array)      Browser localStorage  Persistent
+  D4   Generated notes     HTML string       Browser memory        Session only
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 5 — API ENDPOINTS REFERENCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Method  Path                              Description
+  ──────  ────────────────────────────────  ──────────────────────────────────
+  GET     /api/health                       Server status + paper counts
+  GET     /api/search                       Search papers (level, subject, …)
+  GET     /api/search/subjects              List all subjects by level
+  GET     /api/papers/view/{paper_id}       Stream paper PDF inline
+  GET     /api/papers/download/{paper_id}   Force-download paper PDF
+  GET     /api/papers/local                 List locally cached papers
+  GET     /api/markschemes/view/{paper_id}  Stream mark scheme PDF inline
+  GET     /api/markschemes/download/{id}    Force-download mark scheme
+  GET     /api/markschemes/check/{id}       Check if MS exists locally
+  POST    /api/downloads/save               Save paper to local store
+  GET     /api/downloads/list               List all saved papers
+  DELETE  /api/downloads/delete/{id}        Remove a saved paper
+  GET     /api/downloads/stats              Storage summary
+
+  Paper ID format:  {code}_{season}_{year}_{paper}_{type}
+  Example:          0580_m_j_2023_41_qp
+                    = IGCSE Mathematics · May/June 2023 · Paper 41 · QP
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SECTION 6 — FILE STRUCTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  KalzTunz/
+  ├── README.md
+  ├── docker-compose.yml
+  ├── render.yaml
+  ├── setup_local.sh
+  ├── setup_render.sh
+  ├── .gitignore
+  │
+  ├── backend/                          FastAPI application (flat — no subfolders)
+  │   ├── main.py                       Entry point, app factory, mounts
+  │   ├── config.py                     Settings from environment variables
+  │   ├── cache.py                      Two-level cache (memory + disk)
+  │   ├── subjects.py                   Cambridge subject registry (IGCSE/AS/O)
+  │   ├── schemas.py                    Pydantic request/response models
+  │   ├── scraper_base.py               Shared async HTTP client, retry logic
+  │   ├── scraper_papacambridge.py      Primary source — direct URL construction
+  │   ├── scraper_gceguide.py           Fallback source — HTML listing parser
+  │   ├── local_store.py                Local PDF file index and I/O
+  │   ├── service_search.py             Search orchestration across all sources
+  │   ├── service_pdf.py                PDF fetch, cache, and permanent save
+  │   ├── routes_health.py              GET /api/health
+  │   ├── routes_search.py              GET /api/search, /api/search/subjects
+  │   ├── routes_papers.py              GET /api/papers/view, /download, /local
+  │   ├── routes_markschemes.py         GET /api/markschemes/view, /download
+  │   ├── routes_downloads.py           POST/GET/DELETE /api/downloads
+  │   ├── gunicorn.conf.py              Production server config
+  │   ├── requirements.txt
+  │   ├── Dockerfile
+  │   ├── .env.example
+  │   └── data/
+  │       ├── papers/                   Cached question papers (gitignored)
+  │       ├── markschemes/              Cached mark schemes (gitignored)
+  │       └── cache/                    JSON search cache (gitignored)
+  │
+  └── frontend/                         React application
+      ├── index.html
+      ├── package.json
+      ├── vite.config.js
+      ├── tailwind.config.js
+      ├── postcss.config.js
+      ├── nginx.conf
+      ├── Dockerfile
+      ├── .env.example
+      ├── public/
+      │   ├── logo.png                  CAIE Scholar logo
+      │   └── favicon.svg
+      └── src/
+          ├── main.jsx                  Entry point, router, providers
+          ├── index.css                 Tailwind base + CSS variables
+          ├── lib/
+          │   ├── utils.js              cn() helper, createPageUrl()
+          │   └── query-client.js       TanStack Query instance
+          ├── hooks/
+          │   └── usePaperSearch.js     Search + viewer + download hooks
+          ├── layouts/
+          │   └── Layout.jsx            Navbar, footer, dark mode, API status
+          ├── pages/
+          │   ├── Home.jsx              Landing page with logo hero
+          │   ├── Login.jsx             Split layout — logo left, form right
+          │   ├── Signup.jsx            Split layout — logo left, 2-step form
+          │   ├── AcademicSuite.jsx     IGCSE tab page
+          │   ├── ASLevelSuite.jsx      AS & A-Level tab page
+          │   └── OLevelSuite.jsx       O-Level tab page
+          ├── components/
+          │   ├── academic/
+          │   │   ├── QuestionSearch.jsx       Paper search + result cards
+          │   │   ├── PaperViewer.jsx          PDF iframe + QP/MS tabs
+          │   │   ├── AINotesGenerator.jsx     Claude API notes with print
+          │   │   ├── StudyTimer.jsx           Pomodoro timer + history
+          │   │   └── SearchableSubjectSelect.jsx  Fuzzy subject dropdown
+          │   └── ui/                   shadcn/ui components (21 files)
+          │       button, card, input, label, badge, tabs, sheet, select,
+          │       textarea, skeleton, separator, slider, switch, checkbox,
+          │       dialog, alert-dialog, popover, tooltip, dropdown-menu,
+          │       progress, toaster
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  END OF DOCUMENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

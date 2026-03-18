@@ -1,0 +1,70 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CAIE Scholar — Backend Dependencies
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# IMPORTANT — Python version:
+#   Use Python 3.11 or 3.12 (NOT 3.13 or 3.14 on Windows).
+#   Python 3.14 has no pre-built wheels for lxml or pydantic-core yet.
+#   Download Python 3.12: https://www.python.org/downloads/release/python-3123/
+#
+# Install:
+#   cd backend
+#   python -m venv .venv
+#   .venv\Scripts\activate          (Windows)
+#   source .venv/bin/activate       (Mac/Linux)
+#   pip install -r requirements.txt
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# ── Web framework ─────────────────────────────────────────────────────────────
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+# gunicorn: Linux/Mac production only — does NOT run on Windows.
+# For local dev use: uvicorn main:app --reload --port 8000
+gunicorn==23.0.0
+
+
+# ── Request parsing ───────────────────────────────────────────────────────────
+# Required by FastAPI for multipart/form-data. No file uploads yet but safe to keep.
+python-multipart==0.0.12
+
+
+# ── Data validation ───────────────────────────────────────────────────────────
+# pydantic v2 requires Rust (pydantic-core). Use Python 3.12 for pre-built wheels.
+# If you must use Python 3.13/3.14: install Build Tools first, or downgrade to pydantic<2.
+pydantic==2.10.3
+pydantic-settings==2.6.1
+
+
+# ── HTTP client ───────────────────────────────────────────────────────────────
+# httpx: async HTTP client for fetching PDFs/paper listings. Pure Python.
+httpx==0.28.1
+
+
+# ── HTML parsing ─────────────────────────────────────────────────────────────
+# beautifulsoup4: parses GCE Guide HTML pages. Pure Python. Always installs.
+beautifulsoup4==4.12.3
+
+# lxml: faster HTML parser for BeautifulSoup.
+# WINDOWS / Python 3.13+ NOTE: requires Microsoft C++ Build Tools to compile.
+# The app already falls back to html.parser (Python stdlib) when lxml is missing.
+# SAFE TO REMOVE on Windows — comment out the line below and it just works:
+# lxml==5.3.0
+lxml==5.3.0
+
+
+# ── PDF utilities ─────────────────────────────────────────────────────────────
+# pypdf: NOT currently used in any .py file (grep confirmed). Commented out.
+# Re-add when implementing PDF metadata extraction (page count, title, etc.).
+# pypdf==5.1.0
+
+
+# ── Environment variables ─────────────────────────────────────────────────────
+# Loads .env into os.environ. Pure Python, always installs cleanly.
+python-dotenv==1.0.1
+
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+# No test files exist yet. Comment out if you want a faster install.
+pytest==8.3.4
+pytest-asyncio==0.24.0
