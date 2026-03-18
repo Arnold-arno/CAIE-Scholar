@@ -50,7 +50,7 @@ beautifulsoup4==4.12.3
 # The app already falls back to html.parser (Python stdlib) when lxml is missing.
 # SAFE TO REMOVE on Windows — comment out the line below and it just works:
 # lxml==5.3.0
-lxml==5.3.0
+#lxml==5.3.0
 
 
 # ── PDF utilities ─────────────────────────────────────────────────────────────
