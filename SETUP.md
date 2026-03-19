@@ -226,3 +226,50 @@ Make sure Node.js is version 18 or newer (`node --version`). Delete the `node_mo
 
 **CORS error in browser console**  
 Make sure `VITE_API_URL` in `frontend/.env` matches the port your backend is running on, and that the same URL is in `ALLOWED_ORIGINS` in `backend/.env`.
+
+---
+
+## Render.com — Python version fix
+
+Render defaults to the latest Python (currently 3.14) which breaks `pydantic-core`. The fix is already applied in the repo — three files pin Python 3.12:
+
+| File | Purpose |
+|------|---------|
+| `backend/.python-version` | Primary signal — Render reads this first |
+| `backend/runtime.txt` | Fallback for older Render behaviour |
+| `render.yaml` → `pythonVersion: "3.12.3"` | Blueprint-level override |
+
+If your deploy still shows Python 3.14 after pushing these files, go to your backend service in the Render dashboard → **Settings → Environment** and add a variable manually:
+
+```
+Key:   PYTHON_VERSION
+Value: 3.12.3
+```
+
+Then click **Manual Deploy → Clear build cache & deploy**.
+
+### What the error means
+
+```
+error: failed to create directory `.../cargo/registry/cache/...`
+Caused by: Read-only file system (os error 30)
+```
+
+This means Render's build container tried to compile `pydantic-core` from Rust source because there was no pre-built wheel for Python 3.14. On Python 3.12 the wheel downloads instantly — no compilation, no Rust, no error.
+
+---
+
+## Enabling AI Notes (requires Anthropic API key)
+
+AI Notes are powered by Claude. To enable them:
+
+1. Get a free API key from [console.anthropic.com](https://console.anthropic.com)
+2. Open `backend/.env` and set:
+   ```
+   ANTHROPIC_API_KEY=sk-ant-...your-key-here...
+   ```
+3. Restart the backend (`uvicorn main:app --reload --port 8000`)
+
+The key never leaves your backend server — the frontend calls `/api/ai/notes` on your own backend, which adds the key before forwarding to Anthropic.
+
+**Without the key:** AI Notes shows a 503 error. All other features (search, PDF viewer, timer, mark schemes) continue to work normally.

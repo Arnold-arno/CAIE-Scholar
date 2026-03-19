@@ -1,11 +1,10 @@
 # render.yaml — Deploy CAIE Scholar on Render.com
-# Docs: https://render.com/docs/blueprint-spec
 #
 # Deploy steps:
 #   1. Push this repo to GitHub
-#   2. render.com → New → Blueprint → connect repo
-#   3. Render detects this file and creates both services
-#   4. After backend deploys, copy its URL into VITE_API_URL below → redeploy frontend
+#   2. render.com → New → Blueprint → connect your repo
+#   3. Render detects this file and creates both services automatically
+#   4. Once backend is live: copy its URL into VITE_API_URL below and redeploy frontend
 
 services:
 
@@ -17,21 +16,14 @@ services:
     plan: free
     rootDir: backend
 
-    # Pin Python 3.12 — pydantic-core and lxml have pre-built wheels for 3.12.
-    # Without this Render defaults to 3.14 which has no wheels and fails to build.
+    # Python version — ALSO set via .python-version and runtime.txt at repo root
+    # Render reads the repo root files first; this is an extra safety net
     pythonVersion: "3.12.3"
 
-    # Install dependencies. lxml is excluded because:
-    #   - It is a C extension with no wheel for Python 3.14
-    #   - The scraper uses html.parser (stdlib) anyway so lxml is never called
-    #   - Removing it with --ignore-requires-python is not needed on 3.12 (wheel exists)
-    #   - If you ever see an lxml build error, change to:
-    #     pip install -r requirements.txt --constraint <(echo "lxml==")
+    # pip install only — no compilation needed on Python 3.12 (all wheels pre-built)
     buildCommand: pip install -r requirements.txt
 
-    # Gunicorn starts multiple uvicorn worker processes for production throughput
     startCommand: gunicorn main:app -c gunicorn.conf.py
-
     healthCheckPath: /api/health
 
     envVars:
@@ -45,7 +37,6 @@ services:
         value: "INFO"
       - key: ALLOWED_ORIGINS
         value: '["https://caiescholar-frontend.onrender.com"]'
-        # ↑ Replace with your actual frontend URL after the first deploy
       - key: CACHE_TTL_SEARCH
         value: "3600"
       - key: CACHE_TTL_PDF
@@ -60,14 +51,14 @@ services:
       mountPath: /app/data
       sizeGB: 5
 
-  # ── Frontend (Static Site via Nginx) ──────────────────────────────────────
+  # ── Frontend (Static Site) ────────────────────────────────────────────────
   - type: web
     name: caiescholar-frontend
     runtime: static
     region: oregon
     plan: free
     rootDir: frontend
-    buildCommand: npm ci && npm run build
+    buildCommand: npm install && npm run build
     staticPublishPath: dist
 
     headers:
@@ -79,7 +70,6 @@ services:
         value: "public, max-age=31536000, immutable"
 
     routes:
-      # React SPA — all paths must serve index.html so the router works
       - type: rewrite
         source: /*
         destination: /index.html
@@ -87,4 +77,4 @@ services:
     envVars:
       - key: VITE_API_URL
         value: https://caiescholar-backend.onrender.com
-        # ↑ REPLACE with your real backend URL once it deploys
+        # ↑ Replace with your actual backend URL once it's live
