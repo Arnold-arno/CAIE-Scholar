@@ -1,0 +1,51 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CAIE Scholar — Backend Dependencies
+#
+# Render deploy: Python version is pinned to 3.12.3 via:
+#   - /.python-version          (repo root — Render reads this first)
+#   - /runtime.txt              (repo root — fallback)
+#   - render.yaml pythonVersion field
+#
+# Local Windows install: use Python 3.12, NOT 3.13 or 3.14
+#   python.org/downloads/release/python-3123/
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Web framework ─────────────────────────────────────────────────────────────
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+
+# Production process manager (Linux/Mac only — does not run on Windows)
+# Local dev: use  uvicorn main:app --reload --port 8000  instead
+gunicorn==23.0.0
+
+# ── Request parsing ───────────────────────────────────────────────────────────
+python-multipart==0.0.12
+
+# ── Data validation ───────────────────────────────────────────────────────────
+# pydantic v2 — requires pydantic-core (Rust extension)
+# On Python 3.12: pre-built wheel, installs instantly, no compilation needed
+# On Python 3.14: pydantic-core 2.33+ has 3.14 wheels — but we pin 3.12 on Render
+pydantic==2.10.3
+pydantic-settings==2.6.1
+
+# ── HTTP client ───────────────────────────────────────────────────────────────
+# Async HTTP — fetches papers from PapaCambridge and GCE Guide. Pure Python.
+httpx==0.28.1
+openai==1.82.1               # Image generation via gpt-image-1
+
+# ── HTML parsing ─────────────────────────────────────────────────────────────
+# Parses GCE Guide HTML listing pages. Pure Python, always installs.
+beautifulsoup4==4.12.3
+
+# lxml — faster C-based HTML parser (optional speed boost for beautifulsoup4)
+# The scraper uses html.parser (stdlib) so lxml is never actually called.
+# Included here because Python 3.12 has a pre-built wheel (no compilation).
+# If you see a build error on Windows: comment this line out — zero effect on app.
+lxml==5.3.0
+
+# ── Environment variables ─────────────────────────────────────────────────────
+python-dotenv==1.0.1
+
+# ── Testing (no test files yet — comment out for faster install) ──────────────
+pytest==8.3.4
+pytest-asyncio==0.24.0
