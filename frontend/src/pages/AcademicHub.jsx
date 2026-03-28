@@ -9,22 +9,12 @@ import AINotesGenerator from '@/components/academic/AINotesGenerator';
 import StudyTimer       from '@/components/academic/StudyTimer';
 import MySubjects       from '@/components/academic/MySubjects';
 import { useAppContext } from '@/context/AppContext';
+import { IGCSE_SUBJECTS } from '@/data/subjects';
+import { useConfirm } from '@/components/ui/confirm-dialog';
+import { useI18n } from '@/context/I18nContext';
 
 const LEVEL = 'IGCSE';
-const IGCSE_SUBJECTS = {
-  'Accounting':'0452','Agriculture':'0600','Art & Design':'0400','Biology':'0610',
-  'Business Studies':'0450','Chemistry':'0620','Computer Science':'0478',
-  'Co-ordinated Sciences':'0654','Design & Technology':'0445','Economics':'0455',
-  'English - First Language':'0500','English - Second Language':'0510',
-  'English - Literature':'0486','Enterprise':'0454','Environmental Management':'0680',
-  'Food & Nutrition':'0648','French - Foreign Language':'0520','Geography':'0460',
-  'German - Foreign Language':'0525','Global Perspectives':'0457','History':'0470',
-  'ICT':'0417','Islamic Studies':'0493','Mathematics':'0580',
-  'Mathematics - Additional':'0606','Mathematics - International':'0607','Music':'0410',
-  'Physical Education':'0413','Physics':'0625','Religious Studies':'0490',
-  'Science - Combined':'0653','Sociology':'0495','Spanish - Foreign Language':'0530',
-  'Travel & Tourism':'0471','World Literature':'0408',
-};
+// IGCSE_SUBJECTS imported from @/data/subjects
 
 const TAB_META = {
   papers:    { icon: Brain,     label: 'Search Questions', sub: 'Find & view past papers' },
@@ -35,6 +25,7 @@ const TAB_META = {
 
 function FavouritesSection({ level }) {
   const { favourites, toggleFavourite } = useAppContext();
+  const { confirm, ConfirmUI } = useConfirm();
   const favs = favourites[level] || [];
   if (!favs.length) return (
     <div className="text-center py-12">
@@ -45,11 +36,12 @@ function FavouritesSection({ level }) {
   );
   return (
     <div className="space-y-3">
+      <ConfirmUI />
       {favs.map(f => (
         <motion.div key={f.id} initial={{opacity:0,x:-10}} animate={{opacity:1,x:0}}
-          className="flex items-center justify-between p-4 bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-200 rounded-2xl hover:shadow-md transition-all">
+          className="flex items-center justify-between p-4 bg-yellow-50 dark:bg-[hsl(40,25%,12%)] border border-yellow-200 dark:border-yellow-900/40 rounded-2xl hover:shadow-md transition-all">
           <div>
-            <p className="font-bold text-gray-900 text-base">{f.subject}</p>
+            <p className="font-bold text-gray-900 dark:text-gray-100 text-base">{f.subject}</p>
             <p className="text-sm text-gray-500 mt-0.5">{f.topic}</p>
           </div>
           <div className="flex gap-2">
@@ -57,7 +49,7 @@ function FavouritesSection({ level }) {
               className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl gap-1.5 text-sm h-9">
               <SearchIcon className="w-3.5 h-3.5"/>Search again
             </Button>
-            <Button size="icon" variant="ghost" onClick={() => toggleFavourite(level,f)} className="h-9 w-9 text-yellow-500">
+            <Button size="icon" variant="ghost" onClick={async()=>{const yes=await confirm({title:"Remove from Favourites?",message:`Remove "${f.subject}" from your favourites?`,confirmLabel:"Remove",danger:false});if(yes)toggleFavourite(level,f);}} className="h-9 w-9 text-yellow-500">
               <Star className="w-4 h-4 fill-current"/>
             </Button>
           </div>
@@ -69,6 +61,7 @@ function FavouritesSection({ level }) {
 
 function HistorySection({ level }) {
   const { history, clearHistory } = useAppContext();
+  const { confirm, ConfirmUI: ConfirmClearHistory } = useConfirm();
   const hist = history[level] || [];
   if (!hist.length) return (
     <div className="text-center py-12">
@@ -80,11 +73,13 @@ function HistorySection({ level }) {
   return (
     <div>
       <div className="flex justify-end mb-3">
-        <Button size="sm" variant="ghost" onClick={() => clearHistory(level)} className="text-red-400 hover:text-red-600 gap-1.5">
+        <ConfirmClearHistory />
+        <Button size="sm" variant="ghost" onClick={async()=>{const yes=await confirm({title:"Clear search history?",message:"All recent searches for this level will be permanently removed.",confirmLabel:"Clear all",danger:true});if(yes)clearHistory(level);}} className="text-red-400 hover:text-red-600 gap-1.5">
           <Trash2 className="w-3.5 h-3.5"/>Clear all
         </Button>
       </div>
       <div className="space-y-3">
+        {/* ConfirmClearHistory renders the dialog */}
         {hist.map(h => (
           <motion.div key={h.id} initial={{opacity:0,x:-10}} animate={{opacity:1,x:0}}
             className="flex items-center justify-between p-4 bg-white dark:bg-[hsl(222,24%,12%)] border border-gray-200 rounded-2xl hover:border-blue-300 hover:shadow-sm transition-all">
@@ -152,7 +147,14 @@ function DownloadsSection({ level }) {
 const pageVariants = { initial:{opacity:0,y:16}, animate:{opacity:1,y:0}, exit:{opacity:0,y:-8} };
 
 export default function AcademicHub() {
+  const { t } = useI18n();
   const [tab, setTab] = useState('papers');
+  // Stable cosmic starfield
+  const cosmicStars = React.useMemo(() => Array.from({length:55},(_,i)=>({
+    id:i, x:Math.random()*100, y:Math.random()*100,
+    r:Math.random()*1.6+0.4, op:Math.random()*0.45+0.12,
+    dur:Math.random()*7+4, delay:Math.random()*-10,
+  })),[]);
   const [subjectsTab, setSubjectsTab] = useState('mine');
   React.useEffect(() => { const h=({detail})=>{if(detail?.tab)setTab(detail.tab);}; window.addEventListener('switchTab',h); return()=>window.removeEventListener('switchTab',h); }, []);
   const [searchSubject, setSearchSubject] = useState('');
@@ -161,39 +163,90 @@ export default function AcademicHub() {
 
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.3}}
-      className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/50 to-indigo-100/60 dark:from-[hsl(222,28%,8%)] dark:via-[hsl(222,26%,9%)] dark:to-[hsl(222,24%,10%)]">
+      className="min-h-screen bg-[#05071a]">
 
-      {/* Hero banner */}
-      <div className="bg-gradient-to-r from-blue-900 via-blue-800 to-indigo-800 text-white relative overflow-hidden">
-        <div className="absolute inset-0 opacity-15" style={{backgroundImage:'repeating-linear-gradient(0deg,transparent,transparent 39px,rgba(255,255,255,.4) 39px,rgba(255,255,255,.4) 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,rgba(255,255,255,.4) 39px,rgba(255,255,255,.4) 40px)'}}/>
-        <motion.div initial={{opacity:0,y:-20}} animate={{opacity:1,y:0}} transition={{duration:0.5}}
-          className="relative max-w-full px-6 sm:px-10 py-10">
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            <span className="bg-white/20 text-sm font-bold px-4 py-1.5 rounded-full border border-white/25">IGCSE</span>
-            <span className="bg-blue-500/30 text-blue-100 text-sm px-4 py-1.5 rounded-full">O-Level equivalent</span>
+      {/* ── Cosmic hero banner ── */}
+      <div className="relative overflow-hidden bg-[#05071a]" style={{minHeight:'220px'}}>
+        {/* Deep starfield */}
+        <div className="absolute inset-0">
+          {cosmicStars.map(s=>(
+            <motion.div key={s.id} className="absolute rounded-full bg-white"
+              style={{left:`${s.x}%`,top:`${s.y}%`,width:s.r,height:s.r,opacity:s.op}}
+              animate={{opacity:[s.op,s.op*2.2,s.op],scale:[1,1.5,1]}}
+              transition={{duration:s.dur,delay:s.delay,repeat:Infinity,ease:'easeInOut'}}
+            />
+          ))}
+          {/* Nebula layers */}
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_10%_60%,rgba(59,130,246,0.35),transparent_45%)]"/>
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_90%_30%,rgba(99,102,241,0.25),transparent_40%)]"/>
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_55%_80%,rgba(16,185,129,0.12),transparent_50%)]"/>
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(245,158,11,0.08),transparent_40%)]"/>
+        </div>
+        {/* Floating orbit rings */}
+        <div className="absolute right-10 top-1/2 -translate-y-1/2 w-44 h-44 opacity-20 hidden lg:block">
+          {[0.5,0.75,1].map((scale,i)=>(
+            <motion.div key={i} className="absolute inset-0 rounded-full border border-blue-400"
+              style={{transform:`scale(${scale})`}}
+              animate={{rotate:360}} transition={{duration:12+i*6,repeat:Infinity,ease:'linear'}}
+            />
+          ))}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-full bg-blue-500/30 flex items-center justify-center text-2xl">🎓</div>
           </div>
-          <h1 className="text-5xl md:text-6xl font-extrabold mb-2 tracking-tight">IGCSE Study Hub</h1>
-          <p className="text-blue-200 text-lg">International General Certificate of Secondary Education</p>
-          <div className="flex items-center gap-2 mt-4">
-            <Zap className="w-4 h-4 text-yellow-300"/>
-            <p className="text-blue-200 text-sm">Search · Study · Succeed</p>
+        </div>
+        {/* Grid overlay */}
+        <div className="absolute inset-0 opacity-[0.04]"
+          style={{backgroundImage:'repeating-linear-gradient(0deg,transparent,transparent 39px,rgba(255,255,255,1) 39px,rgba(255,255,255,1) 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,rgba(255,255,255,1) 39px,rgba(255,255,255,1) 40px)'}}/>
+
+        <motion.div initial={{opacity:0,y:-20}} animate={{opacity:1,y:0}} transition={{duration:0.6}}
+          className="relative z-10 max-w-full px-6 sm:px-10 py-12">
+          <div className="flex flex-wrap items-center gap-2 mb-5">
+            <motion.span whileHover={{scale:1.05}} className="bg-blue-500/25 text-blue-200 text-sm font-black px-4 py-1.5 rounded-full border border-blue-400/30 backdrop-blur-sm">
+              IGCSE
+            </motion.span>
+            <span className="bg-white/10 text-white/60 text-sm px-4 py-1.5 rounded-full border border-white/10">O-Level equivalent</span>
+            <motion.span initial={{scale:0}} animate={{scale:1}} transition={{delay:0.5,type:'spring'}}
+              className="bg-yellow-400/15 text-yellow-300 text-xs font-bold px-3 py-1 rounded-full border border-yellow-400/25 flex items-center gap-1">
+              <Zap className="w-3 h-3"/>40+ subjects
+            </motion.span>
           </div>
+          <motion.h1 initial={{opacity:0,x:-20}} animate={{opacity:1,x:0}} transition={{delay:0.15}}
+            className="text-5xl md:text-7xl font-black mb-3 tracking-tight leading-none">
+            <span className="bg-gradient-to-r from-blue-300 via-blue-100 to-indigo-200 bg-clip-text text-transparent">
+              IGCSE
+            </span>
+            <span className="text-white ml-3">Study Hub</span>
+          </motion.h1>
+          <motion.p initial={{opacity:0}} animate={{opacity:1}} transition={{delay:0.3}}
+            className="text-blue-300/70 text-lg max-w-xl">
+            International General Certificate of Secondary Education
+          </motion.p>
+          <motion.div initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} transition={{delay:0.45}}
+            className="flex flex-wrap items-center gap-3 mt-5">
+            {['📄 Past papers','🤖 AI notes','⏱ Study timer','📊 Mark schemes'].map((f,i)=>(
+              <motion.span key={f} initial={{opacity:0,scale:0.8}} animate={{opacity:1,scale:1}}
+                transition={{delay:0.5+i*0.08}}
+                className="text-xs text-white/50 bg-white/[0.07] border border-white/10 px-3 py-1.5 rounded-full backdrop-blur-sm">
+                {f}
+              </motion.span>
+            ))}
+          </motion.div>
         </motion.div>
       </div>
-      <div className="h-1.5 bg-gradient-to-r from-blue-500 via-indigo-400 to-blue-500"/>
+      <div className="h-px bg-gradient-to-r from-transparent via-blue-500/50 to-transparent"/>
 
-      <div className="max-w-full px-4 sm:px-8 py-8">
+      <div className="max-w-full px-4 sm:px-8 py-8 bg-[#05071a]">
         <Tabs value={tab} onValueChange={setTab} className="space-y-6">
 
           {/* Tab bar */}
-          <div className="bg-white dark:bg-[hsl(222,24%,12%)] rounded-2xl shadow-lg border border-gray-100 dark:border-[hsl(222,18%,20%)] p-2">
+          <div className="bg-white/[0.06] rounded-2xl border border-white/10 p-2 backdrop-blur-sm">
             <TabsList className="bg-transparent flex gap-1 h-auto w-full">
               {Object.entries(TAB_META).map(([value, {icon:Icon, label, sub}]) => (
                 <TabsTrigger key={value} value={value} className="flex-1 flex flex-col items-center gap-1 py-3 px-3 rounded-xl text-left transition-all
                   data-[state=active]:bg-gradient-to-br data-[state=active]:from-blue-700 data-[state=active]:to-indigo-800 data-[state=active]:text-white data-[state=active]:shadow-lg
-                  data-[state=inactive]:text-gray-600 data-[state=inactive]:hover:bg-blue-50 dark:data-[state=inactive]:text-gray-400 dark:data-[state=inactive]:hover:bg-[hsl(222,22%,16%)]">
+                  data-[state=inactive]:text-white/50 data-[state=inactive]:hover:bg-white/[0.08] data-[state=inactive]:hover:text-white/80">
                   <Icon className="w-5 h-5"/>
-                  <span className="font-bold text-sm hidden sm:block">{label}</span>
+                  <span className="font-bold text-sm hidden sm:block">{label === 'Search Questions' ? t('tab.search') : label === 'My Subjects' ? t('tab.subjects') : label === 'AI Notes' ? t('tab.aiNotes') : t('tab.timer')}</span>
                   <span className="text-[10px] opacity-70 hidden lg:block">{sub}</span>
                 </TabsTrigger>
               ))}
@@ -203,11 +256,11 @@ export default function AcademicHub() {
           {/* Current tab context banner */}
           <AnimatePresence mode="wait">
             <motion.div key={tab} initial={{opacity:0,y:6}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-6}} transition={{duration:0.18}}
-              className="flex items-center gap-3 px-5 py-3 bg-white dark:bg-[hsl(222,24%,12%)] rounded-2xl border border-gray-100 dark:border-[hsl(222,18%,20%)] shadow-sm">
+              className="flex items-center gap-3 px-5 py-3 bg-white/[0.06] rounded-2xl border border-white/10 backdrop-blur-sm">
               <currentMeta.icon className="w-6 h-6 text-blue-600 flex-shrink-0"/>
               <div>
-                <p className="font-bold text-gray-900 dark:text-gray-100 text-base">{currentMeta.label}</p>
-                <p className="text-gray-500 dark:text-gray-400 text-sm">{currentMeta.sub}</p>
+                <p className="font-bold text-white text-base">{currentMeta.label}</p>
+                <p className="text-white/50 text-sm">{currentMeta.sub}</p>
               </div>
               <ArrowRight className="w-4 h-4 text-gray-300 ml-auto"/>
             </motion.div>

@@ -16,6 +16,7 @@ import AcademicHub from '@/pages/AcademicHub';
 import ASLevelHub  from '@/pages/ASLevelHub';
 import OLevelHub   from '@/pages/OLevelHub';
 import '@/index.css';
+import { I18nProvider } from '@/context/I18nContext';
 
 const NO_LAYOUT = ['/login', '/signup', '/onboarding'];
 
@@ -31,6 +32,40 @@ function PageWrapper({ children }) {
       {children}
     </motion.div>
   );
+}
+
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  React.useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, [pathname]);
+  return null;
+}
+
+function GlobalKeyNav() {
+  const navigate = useNavigate();
+  React.useEffect(() => {
+    let seq = '';
+    let timer = null;
+    const handler = (e) => {
+      const tag = document.activeElement?.tagName;
+      if (['INPUT','TEXTAREA','SELECT'].includes(tag)) return;
+      if (e.key === 'Escape') { window.dispatchEvent(new CustomEvent('closeAll')); return; }
+      if (e.key === '/') {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('focusSearch'));
+        return;
+      }
+      seq += e.key.toUpperCase();
+      clearTimeout(timer);
+      timer = setTimeout(() => { seq = ''; }, 800);
+      if (seq === 'GH') { navigate('/');           seq = ''; }
+      if (seq === 'GI') { navigate('/AcademicHub'); seq = ''; }
+      if (seq === 'GA') { navigate('/ASLevelHub');  seq = ''; }
+      if (seq === 'GO') { navigate('/OLevelHub');   seq = ''; }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [navigate]);
+  return null;
 }
 
 function AppRoutes() {
@@ -62,10 +97,11 @@ function AppRoutes() {
     </AnimatePresence>
   );
 
-  return noLayout ? routes : <Layout>{routes}</Layout>;
+  return noLayout ? routes : <Layout><GlobalKeyNav /><ScrollToTop />{routes}</Layout>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(
+  <I18nProvider>
   <AppProvider>
     <QueryClientProvider client={queryClientInstance}>
       <Router>
@@ -74,4 +110,5 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <Toaster richColors position="top-right" />
     </QueryClientProvider>
   </AppProvider>
+  </I18nProvider>
 );

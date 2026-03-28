@@ -26,6 +26,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import SearchableSubjectSelect from './SearchableSubjectSelect';
 import { useAppContext } from '@/context/AppContext';
+import { useConfirm } from '@/components/ui/confirm-dialog';
+import { useI18n } from '@/context/I18nContext';
+import SUBJECT_TOPICS from '@/data/subjectTopics';
 
 // All AI calls go through the FastAPI backend so keys stay server-side.
 // Set keys in backend/.env:
@@ -131,7 +134,7 @@ const AI_PROVIDERS = [
     textColour: 'text-purple-600 dark:text-purple-400',
     bgColour: 'bg-purple-50 dark:bg-purple-900/20',
     borderColour: 'border-purple-200 dark:border-purple-800',
-    description: 'Google's fast multimodal model',
+    description: "Google's fast multimodal model",
   },
   {
     id: 'cohere',
@@ -434,6 +437,8 @@ function FlashcardMode({ questions, onClose }) {
 // ── Topic history sidebar ─────────────────────────────────────────────────────
 function HistorySidebar({ examType, onRestore, onClose }) {
   const { notesHistory, deleteNotesSession, clearNotesHistory } = useAppContext();
+  const { confirm, ConfirmUI } = useConfirm();
+  const { t } = useI18n();
   const filtered = notesHistory.filter(h => h.examType === examType);
 
   return (
@@ -450,7 +455,7 @@ function HistorySidebar({ examType, onRestore, onClose }) {
         </div>
         <div className="flex items-center gap-1">
           {filtered.length > 0 && (
-            <button onClick={clearNotesHistory}
+            <button onClick={async () => { const yes = await confirm({ title: 'Clear all notes history?', message: 'All 20 saved AI notes sessions will be permanently deleted.', confirmLabel: t('confirm.clear'), danger: true }); if (yes) clearNotesHistory(); }}
               className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50 transition-colors">
               Clear all
             </button>
@@ -489,7 +494,7 @@ function HistorySidebar({ examType, onRestore, onClose }) {
                 </div>
               </div>
               <button
-                onClick={e => { e.stopPropagation(); deleteNotesSession(h.id); }}
+                onClick={async e => { e.stopPropagation(); const yes = await confirm({ title: 'Delete this notes session?', message: `Delete notes for "${h.subject} — ${h.topic}"? This cannot be undone.`, confirmLabel: t('confirm.delete'), danger: true }); if (yes) deleteNotesSession(h.id); }}
                 className="p-1 text-gray-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0 mt-0.5"
                 title="Delete this session">
                 <Trash2 className="w-3.5 h-3.5" />
@@ -522,6 +527,8 @@ export default function AINotesGenerator({ subjects = {}, examType = 'IGCSE' }) 
   const [historyOpen,      setHistoryOpen]     = useState(false);
 
   const links = STUDY_LINKS[examType] || STUDY_LINKS.IGCSE;
+  const { confirm, ConfirmUI } = useConfirm();
+  const { t } = useI18n();
 
   // Check backend capabilities on mount — determines available providers + image gen
   useEffect(() => {
@@ -653,6 +660,7 @@ export default function AINotesGenerator({ subjects = {}, examType = 'IGCSE' }) 
 
   return (
     <div className="space-y-6">
+      <ConfirmUI />
 
       {/* ── Input card ─────────────────────────────────────────────────────── */}
       <Card className="border-none shadow-xl bg-white/90 backdrop-blur-sm">
@@ -686,12 +694,35 @@ export default function AINotesGenerator({ subjects = {}, examType = 'IGCSE' }) 
           <div>
             <Label className="text-sm font-semibold mb-2 flex items-center gap-2">
               <span className="bg-purple-100 text-purple-700 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">2</span>
-              Topic or chapter
+              {t('notes.topic')} or chapter
             </Label>
+
+            {/* ── Quick topic presets ── */}
+            {selectedSubject && SUBJECT_TOPICS[selectedSubject] && (
+              <div className="mb-2.5">
+                <p className="text-xs text-gray-400 dark:text-gray-500 mb-1.5 flex items-center gap-1">
+                  <Zap className="w-3 h-3 text-purple-400"/>{t('notes.presetTopics')} — click to autofill
+                </p>
+                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                  {SUBJECT_TOPICS[selectedSubject].map(tp => (
+                    <button key={tp.label}
+                      onClick={() => setTopic(tp.query)}
+                      className={`text-xs px-3 py-1.5 rounded-full border transition-all font-medium whitespace-nowrap ${
+                        topic === tp.query
+                          ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                          : 'bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800 hover:bg-purple-100 dark:hover:bg-purple-900/40'
+                      }`}>
+                      {tp.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <Textarea
               placeholder="e.g. Quadratic equations, Photosynthesis, Newton's Laws, Supply and Demand…"
               value={topic} onChange={e => setTopic(e.target.value)}
-              className="min-h-[80px] border-2 border-gray-200 rounded-xl resize-none" />
+              className="min-h-[80px] border-2 border-gray-200 dark:border-[hsl(222,18%,24%)] dark:bg-[hsl(222,22%,13%)] dark:text-gray-100 rounded-xl resize-none" />
           </div>
 
           {/* ── AI Provider selector ── */}

@@ -273,3 +273,57 @@ AI Notes are powered by Claude. To enable them:
 The key never leaves your backend server — the frontend calls `/api/ai/notes` on your own backend, which adds the key before forwarding to Anthropic.
 
 **Without the key:** AI Notes shows a 503 error. All other features (search, PDF viewer, timer, mark schemes) continue to work normally.
+
+---
+
+## New features (latest update)
+
+### Multi-provider AI (GPT-4o · Grok · Gemini · Cohere)
+
+In addition to Claude, CAIE Scholar now supports 4 other AI providers for notes generation.
+Set any combination of these keys in `backend/.env` or Render environment variables:
+
+| Key | Provider | Notes |
+|-----|----------|-------|
+| `ANTHROPIC_API_KEY` | Claude (recommended) | Best for deep explanations |
+| `OPENAI_API_KEY` | GPT-4o + image generation | Also enables diagram images |
+| `GROK_API_KEY` | xAI Grok | console.x.ai |
+| `GEMINI_API_KEY` | Google Gemini 2.0 Flash | aistudio.google.com |
+| `COHERE_API_KEY` | Cohere Command R+ | dashboard.cohere.com |
+
+The frontend calls `GET /api/ai/capabilities` on startup to discover which providers are configured,
+then shows only the available ones in the AI Notes provider grid.
+
+### Paper upload & AI analysis
+
+Users can upload any Cambridge past paper PDF and have it broken down automatically:
+- **Endpoint:** `POST /api/ai/analyse-paper` (requires Claude or GPT-4o key)
+- **Returns:** structured questions, marks, type, model answers, examiner notes
+- Access via the **Upload & Analyse Paper** tab in Search Questions on every Study Hub
+
+### App language / i18n
+
+7 languages available in **Settings → Language**:
+English · Français · Español · 中文 · العربية · Italiano · Deutsch
+
+Arabic applies right-to-left layout automatically via `document.documentElement.dir`.
+
+### Confirmation dialogs
+
+All destructive actions now require confirmation before executing:
+- Remove subject, clear search history, delete notes session, clear all notes, unfavourite, sign out, reset timer
+
+### Subject topic presets
+
+In AI Notes, selecting a subject shows quick-topic pills (e.g. Algebra, Quadratics, Trigonometry for Maths).
+Clicking any pill auto-fills the topic field. Supports all major Cambridge subjects.
+
+### Keyboard shortcuts
+
+Press **?** anywhere in the app to see all keyboard shortcuts.
+Highlights: `⌘K` command palette, `/` focus search, `F` flashcard mode, `←→` navigate flashcards.
+
+### PWA (installable)
+
+The app ships a `public/manifest.json` — users on Chrome/Edge/Safari can install it
+to their home screen for offline-like quick access.

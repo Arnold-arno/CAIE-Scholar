@@ -23,6 +23,8 @@ import SearchableSubjectSelect from './SearchableSubjectSelect';
 import PaperViewer from './PaperViewer';
 import { usePaperSearch, downloadPaper } from '@/hooks/usePaperSearch';
 import { useAppContext } from '@/context/AppContext';
+import { useConfirm } from '@/components/ui/confirm-dialog';
+import { useI18n } from '@/context/I18nContext';
 import { ReadAloudZone } from '@/components/ui/read-aloud';
 import PaperAnalyser from '@/components/academic/PaperAnalyser';
 
@@ -40,20 +42,26 @@ const SOURCE_STYLE = {
 
 // Demo entries per exam level — shown when user has zero real history
 const DEMO_HISTORY = {
-  IGCSE:    [
-    { id: 'demo1', subject: 'Mathematics',      topic: 'Quadratic equations',  subjectCode: '0580', demo: true },
-    { id: 'demo2', subject: 'Biology',           topic: 'Photosynthesis',        subjectCode: '0610', demo: true },
-    { id: 'demo3', subject: 'English Language',  topic: 'Directed writing',      subjectCode: '0500', demo: true },
+  IGCSE: [
+    { id: 'demo1', subject: 'Mathematics',             topic: 'Quadratic equations',           subjectCode: '0580', demo: true },
+    { id: 'demo2', subject: 'Biology',                 topic: 'Photosynthesis and respiration', subjectCode: '0610', demo: true },
+    { id: 'demo3', subject: 'English - First Language',topic: 'Directed writing techniques',   subjectCode: '0500', demo: true },
+    { id: 'demo4', subject: 'Chemistry',               topic: 'Acids, bases and salts',        subjectCode: '0620', demo: true },
+    { id: 'demo5', subject: 'Physics',                 topic: 'Forces and motion',             subjectCode: '0625', demo: true },
   ],
   AS_LEVEL: [
-    { id: 'demo1', subject: 'Mathematics',       topic: 'Integration',           subjectCode: '9709', demo: true },
-    { id: 'demo2', subject: 'Physics',            topic: "Newton's laws",         subjectCode: '9702', demo: true },
-    { id: 'demo3', subject: 'Economics',          topic: 'Supply and demand',     subjectCode: '9708', demo: true },
+    { id: 'demo1', subject: 'Mathematics',             topic: 'Integration techniques',        subjectCode: '9709', demo: true },
+    { id: 'demo2', subject: 'Physics',                 topic: 'Circular motion and gravity',   subjectCode: '9702', demo: true },
+    { id: 'demo3', subject: 'Economics',               topic: 'Market structures',             subjectCode: '9708', demo: true },
+    { id: 'demo4', subject: 'Chemistry',               topic: 'Organic chemistry mechanisms',  subjectCode: '9701', demo: true },
+    { id: 'demo5', subject: 'Biology',                 topic: 'DNA replication and genetics',  subjectCode: '9700', demo: true },
   ],
-  O_LEVEL:  [
-    { id: 'demo1', subject: 'Mathematics',       topic: 'Algebra',               subjectCode: '4024', demo: true },
-    { id: 'demo2', subject: 'Chemistry',          topic: 'Atomic structure',      subjectCode: '5070', demo: true },
-    { id: 'demo3', subject: 'English Language',  topic: 'Comprehension',         subjectCode: '1123', demo: true },
+  O_LEVEL: [
+    { id: 'demo1', subject: 'Mathematics',             topic: 'Algebra and simultaneous equations', subjectCode: '4024', demo: true },
+    { id: 'demo2', subject: 'Chemistry',               topic: 'Atomic structure and bonding',  subjectCode: '5070', demo: true },
+    { id: 'demo3', subject: 'English Language',        topic: 'Comprehension and summary',     subjectCode: '1123', demo: true },
+    { id: 'demo4', subject: 'Physics',                 topic: 'Waves and optics',              subjectCode: '5054', demo: true },
+    { id: 'demo5', subject: 'Biology',                 topic: 'Cell biology and diffusion',    subjectCode: '5090', demo: true },
   ],
 };
 
@@ -68,9 +76,12 @@ export default function QuestionSearch({
   const [season,      setSeason]      = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selected,    setSelected]    = useState(null);
+  const [selectedPaper, setSelectedPaper] = useState(null);
 
   const { results, isSearching, error, search } = usePaperSearch();
   const { addToHistory, history, toggleFavourite, isFavourite } = useAppContext();
+  const { confirm, ConfirmUI: ConfirmFav } = useConfirm();
+  const { t } = useI18n();
 
   const realHistory   = history[examType] || [];
   const demoHistory   = DEMO_HISTORY[examType] || [];
@@ -84,6 +95,8 @@ export default function QuestionSearch({
     return () => {};
   }, []);
 
+  const topicRef = React.useRef(null);
+
   useEffect(() => {
     const handler = ({ detail }) => {
       if (detail.subject) setSubject(detail.subject);
@@ -92,6 +105,16 @@ export default function QuestionSearch({
     };
     window.addEventListener('searchAgain', handler);
     return () => window.removeEventListener('searchAgain', handler);
+  }, []);
+
+  // Global / key focuses the topic input
+  useEffect(() => {
+    const handler = () => {
+      setSearchMode('search');
+      setTimeout(() => topicRef.current?.focus(), 50);
+    };
+    window.addEventListener('focusSearch', handler);
+    return () => window.removeEventListener('focusSearch', handler);
   }, []);
 
   useEffect(() => { if (initialSubject) setSubject(initialSubject); }, [initialSubject]);
@@ -104,13 +127,15 @@ export default function QuestionSearch({
     // First real search — demo history disappears automatically because realHistory.length > 0
     addToHistory(examType, {
       subject: s, topic: t || `All papers — ${s}`,
-      subjectCode: subjects[s] || '', year, season,
+      subjectCode: (typeof subjects[s] === 'object' ? subjects[s].code : subjects[s]) || '',
+      year, season, paper: selectedPaper || undefined,
     });
     await search({
       level: examType, subject: s,
       topic:  t || undefined,
       year:   year   ? parseInt(year) : undefined,
       season: season || undefined,
+      paper:  selectedPaper || undefined,
     });
   }, [subject, topic, year, season, examType, search, addToHistory, subjects]);
 
@@ -133,7 +158,7 @@ export default function QuestionSearch({
     <div className="pt-1">
       <p className="text-[11px] font-semibold text-gray-400 mb-1.5 flex items-center gap-1">
         <History className="w-3 h-3" />
-        {isDemo ? 'Try one of these examples:' : 'Recent searches'}
+        {isDemo ? 'Try one of these examples:' : t('search.recent')}
         {isDemo && <span className="ml-1 text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full">demo</span>}
       </p>
       <div className="flex flex-wrap gap-1.5">
@@ -158,6 +183,7 @@ export default function QuestionSearch({
 
   return (
     <div className="space-y-5 w-full">
+      <ConfirmFav />
 
       {/* ── Mode selector ── */}
       <div className="flex gap-2 bg-white dark:bg-[hsl(222,24%,12%)] p-1.5 rounded-2xl border border-gray-200 dark:border-[hsl(222,18%,22%)] shadow-sm">
@@ -189,7 +215,7 @@ export default function QuestionSearch({
       <Card className="border-none shadow-xl bg-white dark:bg-[hsl(222,24%,11%)] w-full">
         <CardHeader className={`${accentG} rounded-t-xl py-4 px-6`}>
           <CardTitle className="flex items-center gap-2 text-white text-lg">
-            <Search className="w-5 h-5" />Search Questions
+            <Search className="w-5 h-5" />{t('search.title')}
           </CardTitle>
           <p className="text-white/70 text-xs mt-0.5">PapaCambridge · GCE Guide · Local cache</p>
         </CardHeader>
@@ -198,7 +224,8 @@ export default function QuestionSearch({
             {/* Left col: subject + topic */}
             <div className="space-y-4">
               <SearchableSubjectSelect subjects={subjects} selectedSubject={subject}
-                onSelectSubject={setSubject} label="Subject" stepNumber="1" />
+                onSelectSubject={setSubject} selectedPaper={selectedPaper}
+                onSelectPaper={setSelectedPaper} label="Subject" stepNumber="1" />
               <div>
                 <Label className="text-sm font-semibold mb-2 flex items-center gap-2">
                   <span className={`${accentG} text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold`}>2</span>
@@ -256,7 +283,7 @@ export default function QuestionSearch({
                 className={`w-full py-5 text-base font-semibold ${accentG} text-white hover:opacity-90 rounded-xl`}>
                 {isSearching
                   ? <><Loader2 className="w-5 h-5 mr-2 animate-spin"/>Searching…</>
-                  : <><Search className="w-5 h-5 mr-2"/>Find Questions</>}
+                  : <><Search className="w-5 h-5 mr-2"/>{t('search.findBtn')}</>}
               </Button>
             </div>
           </div>
@@ -278,11 +305,41 @@ export default function QuestionSearch({
         </Card>
       )}
 
+      {/* Skeleton shimmer while searching */}
+      {isSearching && searchMode === 'search' && (
+        <motion.div initial={{opacity:0}} animate={{opacity:1}} className="space-y-3">
+          <p className="text-sm text-gray-400 dark:text-gray-500 animate-pulse flex items-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin"/>Searching across sources…
+          </p>
+          {[1,2,3,4].map(i=>(
+            <div key={i} className="rounded-2xl border border-gray-200 dark:border-white/10 overflow-hidden animate-pulse"
+              style={{animationDelay:`${i*80}ms`}}>
+              <div className="h-0.5 bg-gradient-to-r from-gray-200 to-gray-100 dark:from-white/10 dark:to-white/5"/>
+              <div className="p-4 space-y-2.5">
+                <div className="flex gap-2">
+                  <div className="h-5 w-20 bg-gray-200 dark:bg-white/10 rounded-full"/>
+                  <div className="h-5 w-24 bg-gray-200 dark:bg-white/10 rounded-full"/>
+                  <div className="h-5 w-16 bg-gray-100 dark:bg-white/[0.06] rounded-full"/>
+                </div>
+                <div className="h-4 w-3/4 bg-gray-200 dark:bg-white/10 rounded-lg"/>
+              </div>
+            </div>
+          ))}
+        </motion.div>
+      )}
+
       {/* Results */}
       {results.length > 0 && (
         <motion.div initial={{opacity:0,y:12}} animate={{opacity:1,y:0}}>
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm text-gray-500 dark:text-gray-400">{results.length} paper{results.length!==1?'s':''} found</p>
+          <div className="flex items-center justify-between mb-4">
+            <motion.div initial={{opacity:0,y:-6}} animate={{opacity:1,y:0}}
+              className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 px-3 py-1.5 rounded-full border border-green-200 dark:border-green-800 text-sm font-bold">
+                <CheckCircle className="w-3.5 h-3.5"/>
+                {results.length} result{results.length!==1?'s':''} found
+              </div>
+            </motion.div>
+            <p className="text-xs text-gray-400 dark:text-gray-500">Click any card to view</p>
           </div>
           <ReadAloudZone label="Search results" className="space-y-2.5">
             {results.map((paper, i) => {
@@ -318,7 +375,7 @@ export default function QuestionSearch({
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0" onClick={e=>e.stopPropagation()}>
                           <Button size="icon" variant="ghost"
-                            onClick={() => toggleFavourite(examType, favKey(paper))}
+                            onClick={async()=>{if(faved){const yes=await confirm({title:'Remove from Favourites?',message:`Remove this ${paper.subject} paper from your favourites?`,confirmLabel:'Remove',danger:false});if(yes)toggleFavourite(examType,favKey(paper));}else{toggleFavourite(examType,favKey(paper));}}}
                             className={`h-8 w-8 ${faved?'text-yellow-500':'text-gray-300 hover:text-yellow-400'}`}>
                             <Star className={`w-4 h-4 ${faved?'fill-current':''}`}/>
                           </Button>
@@ -341,15 +398,30 @@ export default function QuestionSearch({
         </motion.div>
       )}
 
-      {/* Empty state */}
-      {!isSearching && results.length===0 && !error && (
-        <div className="text-center py-16">
-          <div className="w-16 h-16 bg-blue-50 dark:bg-[hsl(222,30%,16%)] rounded-full flex items-center justify-center mx-auto mb-4">
-            <FileText className="w-8 h-8 text-blue-200 dark:text-blue-700"/>
+      {/* Animated empty state */}
+      {!isSearching && results.length===0 && !error && searchMode === 'search' && (
+        <motion.div className="text-center py-16" initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} transition={{delay:0.1}}>
+          <div className="relative w-24 h-24 mx-auto mb-5">
+            {/* Animated rings */}
+            {[0,1,2].map(i => (
+              <motion.div key={i}
+                className="absolute inset-0 rounded-full border-2 border-blue-400/20 dark:border-blue-500/20"
+                animate={{ scale:[1, 1.5+i*0.3, 1], opacity:[0.6,0,0.6] }}
+                transition={{ duration:2.5, delay:i*0.4, repeat:Infinity, ease:'easeInOut' }}
+              />
+            ))}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${accentFrom} ${accentTo} flex items-center justify-center shadow-lg`}>
+                <FileText className="w-8 h-8 text-white"/>
+              </div>
+            </div>
           </div>
-          <p className="text-gray-400 dark:text-gray-500 text-sm">Select a subject and click Find Questions</p>
-          <p className="text-gray-300 dark:text-gray-600 text-xs mt-1">Try one of the example searches above to get started</p>
-        </div>
+          <p className="text-gray-700 dark:text-gray-300 font-semibold text-base mb-1">Ready to search</p>
+          <p className="text-gray-400 dark:text-gray-500 text-sm mb-4">Select a subject and click Find Questions</p>
+          <p className="text-gray-400 dark:text-gray-500 text-xs">
+            💡 Try one of the example searches above — or type your own topic
+          </p>
+        </motion.div>
       )}
 
       </> /* end searchMode === 'search' */ }

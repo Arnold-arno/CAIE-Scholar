@@ -5,11 +5,12 @@
  * Step 2 — pick study level
  * Step 3 — pick subjects for that level
  */
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight, ChevronLeft, CheckCircle, BookOpen, Search, Clock, Sparkles, Star, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAppContext } from '@/context/AppContext';
+import { IGCSE_SUBJECTS, AS_LEVEL_SUBJECTS, O_LEVEL_SUBJECTS, toCodeMap } from '@/data/subjects';
 import { useNavigate } from 'react-router-dom';
 
 // Subject lists per level
@@ -69,7 +70,7 @@ const LEVELS = [
     alias: 'O-Level equivalent · Ages 14–16',
     colour: 'from-blue-700 to-indigo-700',
     light: 'bg-blue-50 border-blue-300',
-    path: '/AcademicSuite',
+    path: '/AcademicHub',
   },
   {
     id: 'AS_LEVEL', label: 'AS & A-Level',
@@ -77,7 +78,7 @@ const LEVELS = [
     alias: 'Pre-university · Ages 16–18',
     colour: 'from-amber-700 to-red-700',
     light: 'bg-amber-50 border-amber-300',
-    path: '/ASLevelSuite',
+    path: '/ASLevelHub',
   },
   {
     id: 'O_LEVEL', label: 'O-Level',
@@ -85,7 +86,7 @@ const LEVELS = [
     alias: 'Cambridge O Level · Ages 14–16',
     colour: 'from-emerald-700 to-teal-700',
     light: 'bg-emerald-50 border-emerald-300',
-    path: '/OLevelSuite',
+    path: '/OLevelHub',
   },
 ];
 
@@ -126,19 +127,25 @@ export default function Onboarding() {
 
   const levelSubjects = level ? (SUBJECTS_BY_LEVEL[level.id] || []) : [];
 
+  const onboardingStars = useMemo(() => Array.from({length:65},(_,i)=>({
+    id:i, x:Math.random()*100, y:Math.random()*100,
+    r:Math.random()*1.8+0.4, op:Math.random()*0.45+0.12,
+    dur:Math.random()*7+4, delay:Math.random()*-10,
+  })),[]);
+
   return (
     <div className="min-h-screen bg-[#05071a] flex items-center justify-center px-4 py-8 relative overflow-hidden">
-      {/* Starfield */}
+      {/* Animated starfield */}
       <div className="absolute inset-0">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_40%,rgba(59,130,246,0.15),transparent_60%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_70%_20%,rgba(220,38,38,0.1),transparent_50%)]" />
-        {Array.from({ length: 60 }).map((_, i) => (
-          <div key={i} className="absolute rounded-full bg-white"
-            style={{
-              width: `${Math.random() * 2 + 0.5}px`, height: `${Math.random() * 2 + 0.5}px`,
-              top: `${Math.random() * 100}%`, left: `${Math.random() * 100}%`,
-              opacity: Math.random() * 0.6 + 0.1,
-            }} />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_40%,rgba(59,130,246,0.18),transparent_60%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_70%_20%,rgba(139,92,246,0.12),transparent_50%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_60%_80%,rgba(16,185,129,0.08),transparent_55%)]" />
+        {onboardingStars.map(s => (
+          <motion.div key={s.id} className="absolute rounded-full bg-white"
+            style={{ left:`${s.x}%`, top:`${s.y}%`, width:s.r, height:s.r, opacity:s.op }}
+            animate={{ opacity:[s.op,s.op*2.5,s.op], scale:[1,1.6,1] }}
+            transition={{ duration:s.dur, delay:s.delay, repeat:Infinity, ease:'easeInOut' }}
+          />
         ))}
       </div>
 

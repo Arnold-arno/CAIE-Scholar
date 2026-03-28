@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Brain, Sparkles, Clock, Book, Star, Search as SearchIcon, History, Trash2, Download, FileDown, BookOpen, ArrowRight, Zap } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -9,9 +9,12 @@ import AINotesGenerator from '@/components/academic/AINotesGenerator';
 import StudyTimer       from '@/components/academic/StudyTimer';
 import MySubjects       from '@/components/academic/MySubjects';
 import { useAppContext } from '@/context/AppContext';
+import { AS_LEVEL_SUBJECTS as SUBJECTS } from '@/data/subjects';
+import { useConfirm } from '@/components/ui/confirm-dialog';
+import { useI18n } from '@/context/I18nContext';
 
 const LEVEL    = 'AS_LEVEL';
-const SUBJECTS = {'Accounting':'9706','Biology':'9700','Business':'9609','Chemistry':'9701','Computer Science':'9618','Economics':'9708','English Language':'9093','Geography':'9696','History':'9489','Mathematics':'9709','Physics':'9702','Psychology':'9990','Sociology':'9699'};
+// SUBJECTS imported from @/data/subjects as AS_LEVEL_SUBJECTS
 const TAB_META = {
   papers:    { icon: Brain,    label: 'Search Questions', sub: 'Find & view past papers' },
   subjects:  { icon: Book,     label: 'My Subjects',      sub: 'Manage & track your subjects' },
@@ -23,16 +26,18 @@ const pageVariants = { initial:{opacity:0,y:16}, animate:{opacity:1,y:0}, exit:{
 
 function FavouritesSection({ level }) {
   const { favourites, toggleFavourite } = useAppContext();
+  const { confirm, ConfirmUI } = useConfirm();
   const favs = favourites[level] || [];
   if (!favs.length) return <div className="text-center py-12"><Star className="w-12 h-12 mx-auto text-gray-200 mb-3"/><p className="text-gray-500 font-medium">No favourites yet</p></div>;
-  return <div className="space-y-3">{favs.map(f=>(<motion.div key={f.id} initial={{opacity:0,x:-10}} animate={{opacity:1,x:0}} className="flex items-center justify-between p-4 bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-200 rounded-2xl"><div><p className="font-bold text-gray-900 text-base">{f.subject}</p><p className="text-sm text-gray-500">{f.topic}</p></div><div className="flex gap-2"><Button size="sm" onClick={()=>window.dispatchEvent(new CustomEvent('searchAgain',{detail:{subject:f.subject,topic:f.topic,autoSearch:true}}))} className="bg-amber-600 text-white rounded-xl gap-1.5 h-9 text-sm"><SearchIcon className="w-3.5 h-3.5"/>Search again</Button><Button size="icon" variant="ghost" onClick={()=>toggleFavourite(level,f)} className="h-9 w-9 text-yellow-500"><Star className="w-4 h-4 fill-current"/></Button></div></motion.div>))}</div>;
+  return <><ConfirmUI/><div className="space-y-3">{favs.map(f=>(<motion.div key={f.id} initial={{opacity:0,x:-10}} animate={{opacity:1,x:0}} className="flex items-center justify-between p-4 bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-200 rounded-2xl"><div><p className="font-bold text-gray-900 dark:text-gray-100 text-base">{f.subject}</p><p className="text-sm text-gray-500 dark:text-gray-400">{f.topic}</p></div><div className="flex gap-2"><Button size="sm" onClick={()=>window.dispatchEvent(new CustomEvent('searchAgain',{detail:{subject:f.subject,topic:f.topic,autoSearch:true}}))} className="bg-amber-600 text-white rounded-xl gap-1.5 h-9 text-sm"><SearchIcon className="w-3.5 h-3.5"/>Search again</Button><Button size="icon" variant="ghost" onClick={async()=>{const yes=await confirm({title:'Remove from Favourites?',message:`Remove "${f.subject}" from your favourites?`,confirmLabel:'Remove',danger:false});if(yes)toggleFavourite(level,f);}} className="h-9 w-9 text-yellow-500"><Star className="w-4 h-4 fill-current"/></Button></div></motion.div>))}</div></>;
 }
 
 function HistorySection({ level }) {
   const { history, clearHistory } = useAppContext();
+  const { confirm, ConfirmUI } = useConfirm();
   const hist = history[level] || [];
   if (!hist.length) return <div className="text-center py-12"><History className="w-12 h-12 mx-auto text-gray-200 mb-3"/><p className="text-gray-500 font-medium">No history yet</p></div>;
-  return <div><div className="flex justify-end mb-3"><Button size="sm" variant="ghost" onClick={()=>clearHistory(level)} className="text-red-400 gap-1.5"><Trash2 className="w-3.5 h-3.5"/>Clear</Button></div><div className="space-y-3">{hist.map(h=>(<motion.div key={h.id} initial={{opacity:0,x:-10}} animate={{opacity:1,x:0}} className="flex items-center justify-between p-4 bg-white dark:bg-[hsl(222,24%,12%)] border border-gray-200 rounded-2xl"><div><p className="font-bold text-gray-900 dark:text-gray-100 text-base">{h.subject}</p><p className="text-sm text-gray-500">{h.topic}</p><p className="text-xs text-gray-400">{new Date(h.searchedAt).toLocaleString()}</p></div><Button size="sm" variant="outline" onClick={()=>window.dispatchEvent(new CustomEvent('searchAgain',{detail:{subject:h.subject,topic:h.topic,autoSearch:true}}))} className="rounded-xl gap-1.5 h-9"><SearchIcon className="w-3.5 h-3.5"/>Search again</Button></motion.div>))}</div></div>;
+  return <><ConfirmUI/><div><div className="flex justify-end mb-3"><Button size="sm" variant="ghost" onClick={async()=>{const yes=await confirm({title:'Clear search history?',message:'All recent searches for this level will be permanently removed.',confirmLabel:'Clear all',danger:true});if(yes)clearHistory(level);}} className="text-red-400 gap-1.5"><Trash2 className="w-3.5 h-3.5"/>Clear</Button></div><div className="space-y-3">{hist.map(h=>(<motion.div key={h.id} initial={{opacity:0,x:-10}} animate={{opacity:1,x:0}} className="flex items-center justify-between p-4 bg-white dark:bg-[hsl(222,24%,12%)] border border-gray-200 rounded-2xl"><div><p className="font-bold text-gray-900 dark:text-gray-100 text-base">{h.subject}</p><p className="text-sm text-gray-500">{h.topic}</p><p className="text-xs text-gray-400">{new Date(h.searchedAt).toLocaleString()}</p></div><Button size="sm" variant="outline" onClick={()=>window.dispatchEvent(new CustomEvent('searchAgain',{detail:{subject:h.subject,topic:h.topic,autoSearch:true}}))} className="rounded-xl gap-1.5 h-9"><SearchIcon className="w-3.5 h-3.5"/>Search again</Button></motion.div>))}</div></div></>;
 }
 
 function DownloadsSection({ level }) {
@@ -44,43 +49,79 @@ function DownloadsSection({ level }) {
 }
 
 export default function ASLevelHub() {
+  const { t } = useI18n();
   const [tab,setTab]=useState('papers');
+  const cosmicStars = useMemo(()=>Array.from({length:50},(_,i)=>({
+    id:i,x:Math.random()*100,y:Math.random()*100,
+    r:Math.random()*1.6+0.4,op:Math.random()*0.4+0.12,
+    dur:Math.random()*7+4,delay:Math.random()*-10,
+  })),[]);
   const [subjectsTab,setSubjectsTab]=useState('mine');
   React.useEffect(()=>{const h=({detail})=>{if(detail?.tab)setTab(detail.tab);};window.addEventListener('switchTab',h);return()=>window.removeEventListener('switchTab',h);},[]);
   const [searchSubject,setSearchSubject]=useState('');
   const handleSearchSubject=useCallback(s=>{setSearchSubject(s.name);setTab('papers');setTimeout(()=>window.dispatchEvent(new CustomEvent('searchAgain',{detail:{subject:s.name,topic:'',autoSearch:true}})),150);},[]);
   const currentMeta=TAB_META[tab]||TAB_META.papers;
   return (
-    <motion.div initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.3}} className="min-h-screen bg-gradient-to-br from-slate-50 via-amber-50/40 to-orange-100/50 dark:from-[hsl(222,28%,8%)] dark:to-[hsl(222,24%,10%)]">
-      <div className="bg-gradient-to-r from-amber-800 via-orange-700 to-red-700 text-white relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10" style={{backgroundImage:'repeating-linear-gradient(45deg,transparent,transparent 20px,rgba(255,255,255,.3) 20px,rgba(255,255,255,.3) 21px)'}}/>
-        <motion.div initial={{opacity:0,y:-20}} animate={{opacity:1,y:0}} transition={{duration:0.5}} className="relative max-w-full px-6 sm:px-10 py-10">
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            <span className="bg-white/20 text-sm font-bold px-4 py-1.5 rounded-full border border-white/25">AS & A-Level</span>
-            <span className="bg-white/10 text-white/80 text-sm px-4 py-1.5 rounded-full">GCE Advanced Level</span>
+    <motion.div initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.3}} className="min-h-screen bg-[#05071a]">
+      <div className="relative overflow-hidden bg-[#05071a]" style={{minHeight:'210px'}}>
+        <div className="absolute inset-0">
+          {cosmicStars.map(s=>(
+            <motion.div key={s.id} className="absolute rounded-full bg-white"
+              style={{left:`${s.x}%`,top:`${s.y}%`,width:s.r,height:s.r,opacity:s.op}}
+              animate={{opacity:[s.op,s.op*2.2,s.op]}}
+              transition={{duration:s.dur,delay:s.delay,repeat:Infinity,ease:'easeInOut'}}
+            />
+          ))}
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_15%_55%,rgba(245,158,11,0.25),transparent_45%)]"/>
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_85%_25%,rgba(239,68,68,0.18),transparent_40%)]"/>
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_85%,rgba(99,102,241,0.10),transparent_50%)]"/>
+        </div>
+        <div className="absolute inset-0 opacity-[0.04]" style={{backgroundImage:'repeating-linear-gradient(0deg,transparent,transparent 39px,rgba(255,255,255,1) 39px,rgba(255,255,255,1) 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,rgba(255,255,255,1) 39px,rgba(255,255,255,1) 40px)'}}/>
+        <div className="absolute right-10 top-1/2 -translate-y-1/2 w-40 h-40 opacity-20 hidden lg:block">
+          {[0.5,0.75,1].map((sc,i)=>(
+            <motion.div key={i} className="absolute inset-0 rounded-full border border-amber-400"
+              style={{transform:`scale(${sc})`}}
+              animate={{rotate:360}} transition={{duration:10+i*5,repeat:Infinity,ease:'linear'}}
+            />
+          ))}
+          <div className="absolute inset-0 flex items-center justify-center text-2xl">🎯</div>
+        </div>
+        <motion.div initial={{opacity:0,y:-18}} animate={{opacity:1,y:0}} transition={{duration:0.6}}
+          className="relative z-10 max-w-full px-6 sm:px-10 py-12">
+          <div className="flex flex-wrap items-center gap-2 mb-5">
+            <span className="bg-amber-500/25 text-amber-200 text-sm font-black px-4 py-1.5 rounded-full border border-amber-400/30">AS & A-Level</span>
+            <span className="bg-white/10 text-white/60 text-sm px-4 py-1.5 rounded-full border border-white/10">GCE Advanced Level</span>
           </div>
-          <h1 className="text-5xl md:text-6xl font-extrabold mb-2 tracking-tight">AS & A-Level Study Hub</h1>
-          <p className="text-white/75 text-lg">General Certificate of Education — Advanced Level</p>
-          <div className="flex items-center gap-2 mt-4"><Zap className="w-4 h-4 text-yellow-300"/><p className="text-white/70 text-sm">Search · Study · Succeed</p></div>
+          <h1 className="text-5xl md:text-7xl font-black mb-3 tracking-tight leading-none">
+            <span className="bg-gradient-to-r from-amber-200 via-orange-100 to-red-200 bg-clip-text text-transparent">AS & A-Level</span>
+            <span className="text-white ml-3">Study Hub</span>
+          </h1>
+          <p className="text-amber-300/70 text-lg max-w-xl">General Certificate of Education — Advanced Level</p>
+          <div className="flex flex-wrap gap-3 mt-5">
+            {['📐 Past papers','🤖 AI notes','⏱ Study timer','📊 Mark schemes'].map((f,i)=>(
+              <motion.span key={f} initial={{opacity:0,scale:0.8}} animate={{opacity:1,scale:1}} transition={{delay:0.4+i*0.08}}
+                className="text-xs text-white/50 bg-white/[0.07] border border-white/10 px-3 py-1.5 rounded-full">{f}</motion.span>
+            ))}
+          </div>
         </motion.div>
       </div>
-      <div className="h-1.5 bg-gradient-to-r from-amber-500 to-red-500"/>
-      <div className="max-w-full px-4 sm:px-8 py-8">
+      <div className="h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent"/>
+      <div className="max-w-full px-4 sm:px-8 py-8 bg-[#05071a]">
         <Tabs value={tab} onValueChange={setTab} className="space-y-6">
-          <div className="bg-white dark:bg-[hsl(222,24%,12%)] rounded-2xl shadow-lg border border-gray-100 dark:border-[hsl(222,18%,20%)] p-2">
+          <div className="bg-white/[0.06] rounded-2xl border border-white/10 p-2 backdrop-blur-sm">
             <TabsList className="bg-transparent flex gap-1 h-auto w-full">
               {Object.entries(TAB_META).map(([value,{icon:Icon,label,sub}])=>(
-                <TabsTrigger key={value} value={value} className="flex-1 flex flex-col items-center gap-1 py-3 px-3 rounded-xl transition-all data-[state=active]:bg-gradient-to-br data-[state=active]:from-amber-700 data-[state=active]:to-red-800 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=inactive]:text-gray-600 data-[state=inactive]:hover:bg-amber-50 dark:data-[state=inactive]:text-gray-400 dark:data-[state=inactive]:hover:bg-[hsl(222,22%,16%)]">
-                  <Icon className="w-5 h-5"/><span className="font-bold text-sm hidden sm:block">{label}</span><span className="text-[10px] opacity-70 hidden lg:block">{sub}</span>
+                <TabsTrigger key={value} value={value} className="flex-1 flex flex-col items-center gap-1 py-3 px-3 rounded-xl transition-all data-[state=active]:bg-gradient-to-br data-[state=active]:from-amber-700 data-[state=active]:to-red-800 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=inactive]:text-white/50 data-[state=inactive]:hover:bg-white/[0.08] data-[state=inactive]:hover:text-white/80">
+                  <Icon className="w-5 h-5"/><span className="font-bold text-sm hidden sm:block">{label === 'Search Questions' ? t('tab.search') : label === 'My Subjects' ? t('tab.subjects') : label === 'AI Notes' ? t('tab.aiNotes') : t('tab.timer')}</span><span className="text-[10px] opacity-70 hidden lg:block">{sub}</span>
                 </TabsTrigger>
               ))}
             </TabsList>
           </div>
           <AnimatePresence mode="wait">
             <motion.div key={tab} initial={{opacity:0,y:6}} animate={{opacity:1,y:0}} exit={{opacity:0}} transition={{duration:0.18}}
-              className="flex items-center gap-3 px-5 py-3 bg-white dark:bg-[hsl(222,24%,12%)] rounded-2xl border border-gray-100 dark:border-[hsl(222,18%,20%)] shadow-sm">
+              className="flex items-center gap-3 px-5 py-3 bg-white/[0.06] rounded-2xl border border-white/10 backdrop-blur-sm">
               <currentMeta.icon className="w-6 h-6 text-amber-600 flex-shrink-0"/>
-              <div><p className="font-bold text-gray-900 dark:text-gray-100 text-base">{currentMeta.label}</p><p className="text-gray-500 text-sm">{currentMeta.sub}</p></div>
+              <div><p className="font-bold text-white text-base">{currentMeta.label}</p><p className="text-white/50 text-sm">{currentMeta.sub}</p></div>
               <ArrowRight className="w-4 h-4 text-gray-300 ml-auto"/>
             </motion.div>
           </AnimatePresence>

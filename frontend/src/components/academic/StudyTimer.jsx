@@ -11,8 +11,10 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Play, Pause, RotateCcw, Clock, Save, Bell, Target, TrendingUp, Calendar, Flame, Award } from 'lucide-react';
+import { Play, Pause, RotateCcw, Clock, Save, Bell, Target, TrendingUp, Calendar, Flame, Award, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useConfirm } from '@/components/ui/confirm-dialog';
+import { useI18n } from '@/context/I18nContext';
 import { toast } from 'sonner';
 import { useAppContext } from '@/context/AppContext';
 
@@ -58,6 +60,8 @@ function daysUntil(isoDate) {
 
 export default function StudyTimer({ level }) {
   const { subjects, examDates, setExamDate, weeklyGoal, setWeeklyGoal, last7Days, studyStreak, weeklyMinutes } = useAppContext();
+  const { confirm, ConfirmUI } = useConfirm();
+  const { t } = useI18n();
   const mySubjects = subjects?.[level] || [];
 
   const [preset,    setPreset]    = useState(25);
@@ -101,10 +105,20 @@ export default function StudyTimer({ level }) {
 
   const handleStart = () => { if (!finished) { baseRemRef.current = remaining; setRunning(true); } };
   const handlePause = () => { setRunning(false); baseRemRef.current = remaining; };
-  const handleReset = useCallback(() => {
+  const handleReset = useCallback(async () => {
+    // Only confirm when timer is actively running (not yet started or already stopped)
+    if (running) {
+      const yes = await confirm({
+        title: 'Reset timer?',
+        message: 'The current session progress will be cleared.',
+        confirmLabel: 'Reset',
+        danger: true,
+      });
+      if (!yes) return;
+    }
     setRunning(false); setFinished(false);
     const s = preset * 60; setRemaining(s); baseRemRef.current = s;
-  }, [preset]);
+  }, [preset, running, confirm]);
   const handlePreset = (mins) => {
     setRunning(false); setFinished(false); setPreset(mins);
     const s = mins * 60; setRemaining(s); baseRemRef.current = s;
@@ -160,6 +174,8 @@ export default function StudyTimer({ level }) {
   const totalHours = Math.round(sessions.reduce((a, s) => a + (s.duration || 0), 0) / 60 * 10) / 10;
 
   return (
+    <>
+    <ConfirmUI />
     <div className="space-y-5">
 
       {/* ── Study statistics strip ───────────────────────────────────── */}
@@ -220,7 +236,7 @@ export default function StudyTimer({ level }) {
 
         {/* Timer card */}
         <Card className="border-none shadow-xl bg-white/90">
-          <CardHeader className="border-b bg-gradient-to-r from-blue-50 to-indigo-50">
+          <CardHeader className="border-b bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
             <CardTitle className="flex items-center gap-2 text-sm">
               <Clock className="w-5 h-5 text-blue-600" />Study Timer
             </CardTitle>
@@ -325,7 +341,7 @@ export default function StudyTimer({ level }) {
 
         {/* Weekly goal card */}
         <Card className="border-none shadow-xl bg-white/90">
-          <CardHeader className="border-b bg-gradient-to-r from-purple-50 to-pink-50">
+          <CardHeader className="border-b bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20">
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-sm">
                 <Target className="w-5 h-5 text-purple-600" />Weekly Goal
@@ -454,6 +470,7 @@ export default function StudyTimer({ level }) {
         </CardContent>
       </Card>
     </div>
+    </>
   );
 }
 

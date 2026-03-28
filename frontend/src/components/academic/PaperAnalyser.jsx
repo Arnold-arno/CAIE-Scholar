@@ -260,8 +260,10 @@ ${qs}
             <select value={subject} onChange={e => setSubject(e.target.value)}
               className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-[hsl(222,18%,24%)] rounded-xl bg-white dark:bg-[hsl(222,22%,13%)] text-gray-900 dark:text-gray-100 text-sm focus:border-violet-500 focus:outline-none">
               <option value="">Select the subject of this paper…</option>
-              {Object.keys(subjects).sort().map(s => (
-                <option key={s} value={s}>{s} ({subjects[s]})</option>
+              {Object.keys(subjects).sort().map(s => {
+                const code = typeof subjects[s] === 'object' ? subjects[s].code : subjects[s];
+                return <option key={s} value={s}>{s} — {code}</option>;
+              }
               ))}
             </select>
           </div>

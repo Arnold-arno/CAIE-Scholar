@@ -1,28 +1,45 @@
 /**
- * Signup.jsx — 4-step signup with OTP-style account verification.
- * Steps: 1=details → 2=avatar → 3=verify code → 4=pick exam level
- *
- * Verification: generates a 6-digit code and shows it in a "sent to email"
- * styled panel. In production, swap generateAndSendCode() with a real backend
- * call (POST /api/auth/send-code) that emails the code.
+ * Signup.jsx — 4-step dark-space signup with OTP verification.
+ * Steps: 1=account details → 2=avatar → 3=email verify → 4=exam level
  */
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Eye, EyeOff, Mail, Lock, User, ArrowRight, Loader2,
-  AlertCircle, CheckCircle, Camera, X, Upload, ShieldCheck, RefreshCw,
+  AlertCircle, CheckCircle, Camera, Upload, ShieldCheck, RefreshCw,
+  Sparkles, Star,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AvatarCircle from '@/components/ui/avatar';
 import AvatarPicker from '@/components/ui/avatar-picker';
 import { useAppContext } from '@/context/AppContext';
 import { toast } from 'sonner';
 
-const LEVELS = ['IGCSE', 'AS & A-Level', 'O-Level'];
+// ── Shared cosmos background helpers ─────────────────────────────────────────
+function Starfield({ count = 70 }) {
+  const stars = useMemo(() => Array.from({ length: count }, (_, i) => ({
+    id: i, x: Math.random() * 100, y: Math.random() * 100,
+    r: Math.random() * 1.8 + 0.4, op: Math.random() * 0.5 + 0.15,
+    dur: Math.random() * 6 + 4, delay: Math.random() * -8,
+  })), []);
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden">
+      {stars.map(s => (
+        <motion.div key={s.id} className="absolute rounded-full bg-white"
+          style={{ left:`${s.x}%`, top:`${s.y}%`, width:s.r, height:s.r, opacity:s.op }}
+          animate={{ opacity:[s.op, s.op*2, s.op] }}
+          transition={{ duration:s.dur, delay:s.delay, repeat:Infinity, ease:'easeInOut' }}
+        />
+      ))}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_20%_30%,rgba(59,130,246,0.15),transparent_55%)]"/>
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_80%_70%,rgba(139,92,246,0.12),transparent_50%)]"/>
+    </div>
+  );
+}
 
+// ── Password strength ─────────────────────────────────────────────────────────
 function StrengthBar({ password }) {
   const score = [/.{8,}/, /[a-z]/, /[A-Z]/, /[0-9]/, /[^a-zA-Z0-9]/].filter(r => r.test(password)).length;
   const cols  = ['','bg-red-400','bg-orange-400','bg-yellow-400','bg-green-400','bg-green-500'];
@@ -31,15 +48,16 @@ function StrengthBar({ password }) {
   return (
     <div className="mt-1.5">
       <div className="flex gap-1 mb-1">
-        {[1,2,3,4,5].map(i => <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${i<=score?cols[score]:'bg-gray-200'}`}/>)}
+        {[1,2,3,4,5].map(i => <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${i<=score?cols[score]:'bg-white/10'}`}/>)}
       </div>
-      <p className={`text-xs ${score<3?'text-red-500':score<4?'text-yellow-600':'text-green-600'}`}>{labs[score]}</p>
+      <p className={`text-xs ${score<3?'text-red-400':score<4?'text-yellow-400':'text-green-400'}`}>{labs[score]}</p>
     </div>
   );
 }
 
-// Generate a 6-digit code
 function makeCode() { return String(Math.floor(100000 + Math.random() * 900000)); }
+
+const inputCls = "w-full h-12 bg-white/[0.07] border border-white/15 rounded-xl text-white placeholder-white/30 text-base focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-all px-4";
 
 export default function Signup() {
   const [form,       setForm]       = useState({ name:'', email:'', password:'', confirm:'' });
@@ -50,69 +68,53 @@ export default function Signup() {
   const [error,      setError]      = useState('');
   const [step,       setStep]       = useState(1);
   const [pickerOpen, setPickerOpen] = useState(false);
-
-  // OTP step
   const [secretCode, setSecretCode] = useState('');
   const [enteredCode,setEnteredCode]= useState('');
-  const [codeExpiry, setCodeExpiry] = useState(null); // timestamp ms
+  const [codeExpiry, setCodeExpiry] = useState(null);
   const [timeLeft,   setTimeLeft]   = useState(0);
   const [codeSending,setCodeSending]= useState(false);
   const [codeVerified,setCodeVerified]=useState(false);
-  const otpInputs = [useRef(),useRef(),useRef(),useRef(),useRef(),useRef()];
-
+  const otpRefs = [useRef(),useRef(),useRef(),useRef(),useRef(),useRef()];
   const { signup } = useAppContext();
   const navigate   = useNavigate();
   const update = f => e => setForm(p => ({ ...p, [f]: e.target.value }));
 
-  // Countdown timer for code expiry
   useEffect(() => {
     if (!codeExpiry) return;
     const iv = setInterval(() => {
-      const remaining = Math.max(0, Math.ceil((codeExpiry - Date.now()) / 1000));
-      setTimeLeft(remaining);
-      if (remaining === 0) clearInterval(iv);
+      const r = Math.max(0, Math.ceil((codeExpiry - Date.now()) / 1000));
+      setTimeLeft(r);
+      if (r === 0) clearInterval(iv);
     }, 500);
     return () => clearInterval(iv);
   }, [codeExpiry]);
 
   const sendCode = useCallback(() => {
     const code = makeCode();
-    setSecretCode(code);
-    setEnteredCode('');
-    setCodeExpiry(Date.now() + 5 * 60 * 1000); // 5 min
-    setTimeLeft(300);
-    setCodeVerified(false);
+    setSecretCode(code); setEnteredCode('');
+    setCodeExpiry(Date.now() + 5 * 60 * 1000);
+    setTimeLeft(300); setCodeVerified(false);
     setCodeSending(true);
-    // Simulate brief "sending" delay
-    setTimeout(() => { setCodeSending(false); }, 800);
-    // In production: POST /api/auth/send-code { email: form.email, code }
+    setTimeout(() => setCodeSending(false), 800);
     toast.info(`Verification code sent to ${form.email}`, { duration: 4000 });
   }, [form.email]);
 
-  // OTP digit input handler
   const handleOtpDigit = (idx, val) => {
     const digits = enteredCode.padEnd(6, ' ').split('');
     digits[idx] = val.slice(-1);
     const next = digits.join('').replace(/ /g,'');
     setEnteredCode(next);
-    if (val && idx < 5) otpInputs[idx+1].current?.focus();
+    if (val && idx < 5) otpRefs[idx+1].current?.focus();
   };
 
   const handleOtpKey = (idx, e) => {
-    if (e.key === 'Backspace' && !enteredCode[idx] && idx > 0) {
-      otpInputs[idx-1].current?.focus();
-    }
+    if (e.key === 'Backspace' && !enteredCode[idx] && idx > 0) otpRefs[idx-1].current?.focus();
   };
 
   const verifyCode = () => {
-    if (timeLeft === 0) { setError('Code expired — please request a new one'); return; }
-    if (enteredCode === secretCode) {
-      setCodeVerified(true);
-      setError('');
-      toast.success('Email verified!');
-    } else {
-      setError('Incorrect code. Try again.');
-    }
+    if (timeLeft === 0) { setError('Code expired — request a new one'); return; }
+    if (enteredCode === secretCode) { setCodeVerified(true); setError(''); toast.success('Email verified!'); }
+    else setError('Incorrect code. Try again.');
   };
 
   const handleStep1 = (e) => {
@@ -123,10 +125,6 @@ export default function Signup() {
     setError(''); setStep(2);
   };
 
-  const goToVerify = () => {
-    setError(''); setStep(3); sendCode();
-  };
-
   const handleSubmit = async () => {
     if (!level) { setError('Please select your exam level'); return; }
     setLoading(true); setError('');
@@ -134,262 +132,278 @@ export default function Signup() {
       await new Promise(r => setTimeout(r, 500));
       signup(form.name, form.email, avatar);
       navigate('/onboarding');
-    } catch { setError('Failed to create account. Please try again.'); }
+    } catch { setError('Failed to create account. Try again.'); }
     finally { setLoading(false); }
   };
 
-  const STEPS = 4;
   const previewUser = { name: form.name, email: form.email, avatar };
-  const StepDots = () => (
+
+  // Step indicator
+  const Steps = () => (
     <div className="flex items-center gap-2 mb-8">
-      {Array.from({length:STEPS}).map((_,i) => (
-        <React.Fragment key={i}>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-            step>i+1?'bg-green-500 text-white scale-95':step===i+1?'bg-gradient-to-br from-blue-600 to-indigo-700 text-white scale-110 shadow-lg shadow-blue-300':
-            'bg-gray-100 text-gray-400'
+      {[1,2,3,4].map((n, i) => (
+        <React.Fragment key={n}>
+          <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-black transition-all duration-300 ${
+            step > n ? 'bg-green-500 text-white scale-90'
+            : step === n ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white scale-110 shadow-lg shadow-blue-900/50'
+            : 'bg-white/[0.07] text-white/30 border border-white/10'
           }`}>
-            {step>i+1?<CheckCircle className="w-4 h-4"/>:i+1}
+            {step > n ? <CheckCircle className="w-4 h-4"/> : n}
           </div>
-          {i<STEPS-1&&<div className={`flex-1 h-0.5 rounded-full transition-all duration-500 ${step>i+1?'bg-blue-600':'bg-gray-200'}`}/>}
+          {i < 3 && <div className={`flex-1 h-px transition-all duration-500 ${step > n ? 'bg-green-500' : 'bg-white/[0.08]'}`}/>}
         </React.Fragment>
       ))}
     </div>
   );
 
+  const ErrBanner = () => (
+    <AnimatePresence>
+      {error && (
+        <motion.div initial={{opacity:0,height:0}} animate={{opacity:1,height:'auto'}} exit={{opacity:0,height:0}}
+          className="flex items-center gap-2 bg-red-500/15 text-red-300 rounded-xl px-4 py-3 text-sm border border-red-500/20">
+          <AlertCircle className="w-4 h-4 flex-shrink-0"/>{error}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
   return (
-    <div className="min-h-screen flex">
-      {/* Left panel */}
-      <div className="hidden lg:flex lg:w-5/12 relative overflow-hidden bg-[#05071a] flex-col items-center justify-center px-12">
-        <div className="absolute inset-0">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_20%_50%,rgba(59,130,246,0.2),transparent_60%)]"/>
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_80%_20%,rgba(220,38,38,0.14),transparent_50%)]"/>
-          {Array.from({length:70}).map((_,i)=>(
-            <div key={i} className="absolute rounded-full bg-white" style={{
-              width:`${Math.random()*2.5+0.5}px`,height:`${Math.random()*2.5+0.5}px`,
-              top:`${Math.random()*100}%`,left:`${Math.random()*100}%`,
-              opacity:Math.random()*0.5+0.15
-            }}/>
-          ))}
-        </div>
-        <motion.img src="/logo.png" alt="CAIE Scholar"
-          className="w-64 drop-shadow-2xl relative z-10"
-          style={{filter:'drop-shadow(0 0 50px rgba(59,130,246,0.5))'}}
-          initial={{opacity:0,scale:0.8}} animate={{opacity:1,scale:1}} transition={{duration:0.9}}
-        />
-        <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} transition={{delay:0.4}}
-          className="relative z-10 text-center mt-8">
-          <p className="text-blue-200 text-xl font-light">Your Cambridge exam companion</p>
-          <p className="text-blue-400/60 text-sm mt-2">IGCSE · AS & A-Level · O-Level</p>
-          <div className="flex justify-center gap-4 mt-6">
-            {['📚 Past papers','🤖 AI notes','⏱ Study timer'].map(f=>(
-              <span key={f} className="text-xs text-blue-300/70 bg-white/5 px-3 py-1.5 rounded-full border border-white/10">{f}</span>
+    <div className="min-h-screen flex bg-[#05071a]">
+      {/* ── Left branding panel ── */}
+      <div className="hidden lg:flex lg:w-5/12 relative overflow-hidden border-r border-white/[0.06]">
+        <Starfield count={90}/>
+        <div className="relative z-10 flex flex-col items-center justify-center w-full px-10 gap-6 text-center">
+          <motion.img src="/logo.png" alt="CAIE Scholar"
+            className="w-48 h-48 object-contain drop-shadow-2xl"
+            style={{ filter:'drop-shadow(0 0 60px rgba(59,130,246,0.6))' }}
+            initial={{opacity:0,scale:0.8}} animate={{opacity:1,scale:1}} transition={{duration:0.9}}
+            animate={{ y:[0,-10,0] }} transition={{ duration:5, repeat:Infinity, ease:'easeInOut' }}
+          />
+          <div>
+            <h1 className="text-4xl font-black"><span className="text-blue-400">CAIE</span><span className="text-red-400 ml-2">Scholar</span></h1>
+            <p className="text-blue-200/60 mt-2 text-base">Cambridge · IGCSE · A-Level · O-Level</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 w-full max-w-xs">
+            {[
+              {icon:'📚', label:'Past papers'},
+              {icon:'🤖', label:'AI notes'},
+              {icon:'⏱', label:'Study timer'},
+              {icon:'🌍', label:'7 languages'},
+            ].map(f=>(
+              <div key={f.label} className="flex items-center gap-2 bg-white/[0.06] border border-white/10 rounded-xl px-3 py-2.5">
+                <span className="text-lg">{f.icon}</span>
+                <span className="text-xs text-white/60 font-medium">{f.label}</span>
+              </div>
             ))}
           </div>
-        </motion.div>
+          <p className="text-white/25 text-xs">Free · No ads · Private</p>
+        </div>
       </div>
 
-      {/* Right panel */}
-      <div className="w-full lg:w-7/12 flex items-center justify-center bg-white px-6 py-12 overflow-y-auto">
-        <motion.div initial={{opacity:0,x:30}} animate={{opacity:1,x:0}} className="w-full max-w-lg">
-          <div className="flex justify-center mb-6 lg:hidden">
-            <img src="/logo.png" alt="CAIE Scholar" className="w-28 h-28 object-contain"/>
+      {/* ── Right form panel ── */}
+      <div className="w-full lg:w-7/12 flex items-center justify-center relative overflow-hidden px-6 py-12">
+        <Starfield count={40}/>
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_60%_40%,rgba(99,102,241,0.06),transparent_60%)]"/>
+
+        <motion.div initial={{opacity:0,x:24}} animate={{opacity:1,x:0}} transition={{duration:0.5}}
+          className="relative z-10 w-full max-w-lg">
+          <div className="lg:hidden flex justify-center mb-6">
+            <img src="/logo.png" alt="" className="w-16 h-16 object-contain"
+              style={{filter:'drop-shadow(0 0 16px rgba(59,130,246,0.5))'}}/>
           </div>
 
-          <StepDots/>
+          <div className="bg-white/[0.04] border border-white/[0.09] rounded-3xl p-8 shadow-2xl backdrop-blur-sm">
+            <Steps/>
 
-          <AnimatePresence mode="wait">
-            {/* Step 1: Account details */}
-            {step===1&&(
-              <motion.div key="s1" initial={{opacity:0,x:24}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-24}} transition={{duration:0.2}}>
-                <h1 className="text-3xl font-bold text-gray-900 mb-1">Create your account</h1>
-                <p className="text-gray-500 mb-7 text-sm">Join thousands of Cambridge students on CAIE Scholar</p>
-                <form onSubmit={handleStep1} className="space-y-4">
-                  <div>
-                    <Label className="text-sm font-semibold">Full name</Label>
-                    <div className="relative mt-1.5"><User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"/>
-                      <Input placeholder="Your name" value={form.name} onChange={update('name')} className="pl-10 h-12 text-base border-2 border-gray-200 rounded-xl"/>
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-semibold">Email address</Label>
-                    <div className="relative mt-1.5"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"/>
-                      <Input type="email" placeholder="you@example.com" value={form.email} onChange={update('email')} className="pl-10 h-12 text-base border-2 border-gray-200 rounded-xl"/>
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-semibold">Password</Label>
-                    <div className="relative mt-1.5"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"/>
-                      <Input type={showPwd?'text':'password'} placeholder="Min 8 characters" value={form.password} onChange={update('password')} className="pl-10 pr-10 h-12 text-base border-2 border-gray-200 rounded-xl"/>
-                      <button type="button" onClick={()=>setShowPwd(!showPwd)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-                        {showPwd?<EyeOff className="w-4 h-4"/>:<Eye className="w-4 h-4"/>}
-                      </button>
-                    </div>
-                    <StrengthBar password={form.password}/>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-semibold">Confirm password</Label>
-                    <div className="relative mt-1.5"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"/>
-                      <Input type="password" placeholder="Repeat password" value={form.confirm} onChange={update('confirm')}
-                        className={`pl-10 h-12 text-base border-2 rounded-xl ${form.confirm&&form.password!==form.confirm?'border-red-300':'border-gray-200'}`}/>
-                    </div>
-                  </div>
-                  <AnimatePresence>{error&&<motion.div initial={{opacity:0,height:0}} animate={{opacity:1,height:'auto'}} exit={{opacity:0,height:0}}
-                    className="flex items-center gap-2 bg-red-50 text-red-700 rounded-xl px-4 py-3 text-sm border border-red-200">
-                    <AlertCircle className="w-4 h-4 flex-shrink-0"/>{error}</motion.div>}</AnimatePresence>
-                  <Button type="submit" className="w-full h-12 text-base bg-gradient-to-r from-blue-600 to-indigo-700 text-white font-semibold rounded-xl shadow-lg shadow-blue-200">
-                    Continue <ArrowRight className="w-4 h-4 ml-2"/>
-                  </Button>
-                </form>
-              </motion.div>
-            )}
+            <AnimatePresence mode="wait">
 
-            {/* Step 2: Avatar */}
-            {step===2&&(
-              <motion.div key="s2" initial={{opacity:0,x:24}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-24}} transition={{duration:0.2}}>
-                <h1 className="text-3xl font-bold text-gray-900 mb-1">Add a profile photo</h1>
-                <p className="text-gray-500 mb-8 text-sm">Optional — helps personalise your dashboard</p>
-                <div className="flex flex-col items-center gap-5">
-                  <div className="relative cursor-pointer group" onClick={()=>setPickerOpen(true)}>
-                    <AvatarCircle user={previewUser} size={100} className="ring-4 ring-blue-100 shadow-xl"/>
-                    <div className="absolute inset-0 rounded-full bg-black/35 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <Camera className="w-6 h-6 text-white"/>
-                    </div>
+              {/* ── Step 1: Account details ── */}
+              {step===1&&(
+                <motion.div key="s1" initial={{opacity:0,x:20}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-20}} transition={{duration:0.2}}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Sparkles className="w-5 h-5 text-blue-400"/>
+                    <h2 className="text-2xl font-black text-white">Create your account</h2>
                   </div>
-                  <Button variant="outline" onClick={()=>setPickerOpen(true)}
-                    className="gap-2 border-2 border-blue-200 text-blue-700 hover:bg-blue-50 rounded-xl h-11 px-6">
-                    <Upload className="w-4 h-4"/>{avatar?'Change photo':'Choose photo'}
-                  </Button>
-                  <p className="text-xs text-gray-400 text-center max-w-xs">Upload from your device, paste a URL, or choose from our built-in avatars. All photos stay in your browser.</p>
-                </div>
-                <div className="flex gap-3 mt-8">
-                  <Button variant="outline" onClick={()=>{setStep(1);setError('');}} className="flex-1 h-11 rounded-xl border-2">Back</Button>
-                  <Button onClick={goToVerify} className="flex-1 h-11 bg-gradient-to-r from-blue-600 to-indigo-700 text-white font-semibold rounded-xl">
-                    {avatar?'Looks great!':'Skip for now'} <ArrowRight className="w-4 h-4 ml-2"/>
-                  </Button>
-                </div>
-                <AvatarPicker currentAvatar={avatar} userName={form.name} userEmail={form.email}
-                  open={pickerOpen} onClose={()=>setPickerOpen(false)}
-                  onSave={data=>{setAvatar(data);setPickerOpen(false);}}/>
-              </motion.div>
-            )}
-
-            {/* Step 3: Email verification */}
-            {step===3&&(
-              <motion.div key="s3" initial={{opacity:0,x:24}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-24}} transition={{duration:0.2}}>
-                <div className="flex flex-col items-center text-center mb-8">
-                  <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${codeVerified?'bg-green-100':'bg-blue-100'}`}>
-                    {codeVerified
-                      ? <CheckCircle className="w-8 h-8 text-green-600"/>
-                      : <ShieldCheck className="w-8 h-8 text-blue-600"/>
-                    }
-                  </div>
-                  <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                    {codeVerified?'Email verified!':'Verify your email'}
-                  </h1>
-                  <p className="text-gray-500 text-sm max-w-sm">
-                    {codeVerified
-                      ? 'Your account is ready. Continue to choose your exam level.'
-                      : <>We sent a 6-digit code to <strong className="text-gray-800">{form.email}</strong>. Enter it below to confirm your account.</>
-                    }
-                  </p>
-                </div>
-
-                {!codeVerified&&(
-                  <>
-                    {/* Demo: show the code since we have no real email server */}
-                    {secretCode&&!codeSending&&(
-                      <div className="mb-5 p-4 bg-blue-50 border border-blue-200 rounded-xl text-center">
-                        <p className="text-xs text-blue-600 font-semibold mb-1">📧 Demo mode — code shown here (real app sends email)</p>
-                        <p className="text-3xl font-mono font-bold tracking-[0.3em] text-blue-800">{secretCode}</p>
-                        {timeLeft>0
-                          ? <p className="text-xs text-blue-500 mt-1">Expires in {Math.floor(timeLeft/60)}:{String(timeLeft%60).padStart(2,'0')}</p>
-                          : <p className="text-xs text-red-500 mt-1">Code expired</p>
-                        }
+                  <p className="text-white/40 text-sm mb-6">Join Cambridge students on CAIE Scholar</p>
+                  <form onSubmit={handleStep1} className="space-y-4">
+                    <div>
+                      <Label className="text-xs font-bold text-white/50 uppercase tracking-wider mb-2 block">Full name</Label>
+                      <div className="relative">
+                        <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25"/>
+                        <input placeholder="Your name" value={form.name} onChange={update('name')} className={`${inputCls} pl-11`}/>
                       </div>
-                    )}
-
-                    {/* OTP input */}
-                    <div className="flex gap-2 justify-center mb-5">
-                      {Array.from({length:6}).map((_,i)=>(
-                        <input key={i} ref={otpInputs[i]}
-                          type="text" inputMode="numeric" maxLength={1}
-                          value={enteredCode[i]||''}
-                          onChange={e=>handleOtpDigit(i,e.target.value)}
-                          onKeyDown={e=>handleOtpKey(i,e)}
-                          className="w-11 h-14 text-center text-xl font-bold border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-all"
-                        />
-                      ))}
                     </div>
-
-                    <AnimatePresence>{error&&<motion.div initial={{opacity:0,height:0}} animate={{opacity:1,height:'auto'}} exit={{opacity:0,height:0}}
-                      className="flex items-center gap-2 bg-red-50 text-red-700 rounded-xl px-4 py-3 text-sm border border-red-200 mb-4">
-                      <AlertCircle className="w-4 h-4 flex-shrink-0"/>{error}</motion.div>}</AnimatePresence>
-
-                    <Button onClick={verifyCode} disabled={enteredCode.length<6}
-                      className="w-full h-12 text-base bg-gradient-to-r from-blue-600 to-indigo-700 text-white font-semibold rounded-xl mb-3">
-                      Verify code
+                    <div>
+                      <Label className="text-xs font-bold text-white/50 uppercase tracking-wider mb-2 block">Email address</Label>
+                      <div className="relative">
+                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25"/>
+                        <input type="email" placeholder="you@example.com" value={form.email} onChange={update('email')} className={`${inputCls} pl-11`}/>
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs font-bold text-white/50 uppercase tracking-wider mb-2 block">Password</Label>
+                      <div className="relative">
+                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25"/>
+                        <input type={showPwd?'text':'password'} placeholder="Min 8 characters" value={form.password} onChange={update('password')} className={`${inputCls} pl-11 pr-11`}/>
+                        <button type="button" onClick={()=>setShowPwd(!showPwd)} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60">
+                          {showPwd?<EyeOff className="w-4 h-4"/>:<Eye className="w-4 h-4"/>}
+                        </button>
+                      </div>
+                      <StrengthBar password={form.password}/>
+                    </div>
+                    <div>
+                      <Label className="text-xs font-bold text-white/50 uppercase tracking-wider mb-2 block">Confirm password</Label>
+                      <div className="relative">
+                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25"/>
+                        <input type="password" placeholder="Repeat password" value={form.confirm} onChange={update('confirm')}
+                          className={`${inputCls} pl-11 ${form.confirm&&form.password!==form.confirm?'border-red-500/50':''}`}/>
+                      </div>
+                    </div>
+                    <ErrBanner/>
+                    <Button type="submit" className="w-full h-12 text-base font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl shadow-lg shadow-blue-900/40 gap-2">
+                      Continue <ArrowRight className="w-4 h-4"/>
                     </Button>
+                  </form>
+                </motion.div>
+              )}
 
-                    <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
-                      Didn't get it?
-                      <button onClick={sendCode} disabled={codeSending||timeLeft>240}
-                        className="flex items-center gap-1 text-blue-600 hover:text-blue-800 font-medium disabled:opacity-40">
-                        <RefreshCw className={`w-3.5 h-3.5 ${codeSending?'animate-spin':''}`}/>
-                        {codeSending?'Sending…':timeLeft>240?`Resend in ${timeLeft-240}s`:'Resend code'}
-                      </button>
-                    </div>
-                  </>
-                )}
-
-                {codeVerified&&(
-                  <Button onClick={()=>{setStep(4);setError('');}}
-                    className="w-full h-12 text-base bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold rounded-xl mt-4 gap-2">
-                    Continue <ArrowRight className="w-4 h-4"/>
-                  </Button>
-                )}
-              </motion.div>
-            )}
-
-            {/* Step 4: Exam level */}
-            {step===4&&(
-              <motion.div key="s4" initial={{opacity:0,x:24}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-24}} transition={{duration:0.2}}>
-                <h1 className="text-3xl font-bold text-gray-900 mb-1">Choose your level</h1>
-                <p className="text-gray-500 mb-7 text-sm">Which Cambridge qualification are you preparing for?</p>
-                <div className="space-y-3 mb-7">
-                  {[
-                    {l:'IGCSE',       desc:'International General Certificate of Secondary Education', icon:'🎓'},
-                    {l:'AS & A-Level',desc:'General Certificate of Education — Advanced Level',       icon:'📐'},
-                    {l:'O-Level',     desc:'General Certificate of Education — Ordinary Level',       icon:'📖'},
-                  ].map(({l,desc,icon})=>(
-                    <button key={l} onClick={()=>setLevel(l)}
-                      className={`w-full flex items-start gap-4 p-4 rounded-2xl border-2 text-left transition-all ${
-                        level===l?'border-blue-500 bg-blue-50 shadow-md shadow-blue-100':'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                      }`}>
-                      <span className="text-2xl">{icon}</span>
-                      <div>
-                        <p className={`font-bold text-base ${level===l?'text-blue-700':'text-gray-800'}`}>{l}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">{desc}</p>
+              {/* ── Step 2: Avatar ── */}
+              {step===2&&(
+                <motion.div key="s2" initial={{opacity:0,x:20}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-20}} transition={{duration:0.2}}>
+                  <h2 className="text-2xl font-black text-white mb-1">Add a profile photo</h2>
+                  <p className="text-white/40 text-sm mb-7">Optional — personalises your dashboard</p>
+                  <div className="flex flex-col items-center gap-5 mb-7">
+                    <div className="relative cursor-pointer group" onClick={()=>setPickerOpen(true)}>
+                      <div className="w-28 h-28 rounded-full ring-4 ring-blue-500/30 shadow-2xl shadow-blue-900/40">
+                        <AvatarCircle user={previewUser} size={112}/>
                       </div>
-                      {level===l&&<CheckCircle className="w-5 h-5 text-blue-500 ml-auto flex-shrink-0 mt-0.5"/>}
-                    </button>
-                  ))}
-                </div>
-                <AnimatePresence>{error&&<motion.div initial={{opacity:0,height:0}} animate={{opacity:1,height:'auto'}} exit={{opacity:0,height:0}}
-                  className="flex items-center gap-2 bg-red-50 text-red-700 rounded-xl px-4 py-3 text-sm border border-red-200 mb-4">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0"/>{error}</motion.div>}</AnimatePresence>
-                <div className="flex gap-3">
-                  <Button variant="outline" onClick={()=>{setStep(3);setError('');}} className="flex-1 h-11 rounded-xl border-2">Back</Button>
-                  <Button onClick={handleSubmit} disabled={loading||!level}
-                    className="flex-1 h-12 text-base bg-gradient-to-r from-blue-600 to-indigo-700 text-white font-semibold rounded-xl shadow-lg shadow-blue-200">
-                    {loading?<><Loader2 className="w-4 h-4 mr-2 animate-spin"/>Creating…</>:<>Get started! <ArrowRight className="w-4 h-4 ml-2"/></>}
-                  </Button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                      <div className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <Camera className="w-7 h-7 text-white"/>
+                      </div>
+                    </div>
+                    <Button variant="outline" onClick={()=>setPickerOpen(true)}
+                      className="gap-2 border border-white/15 bg-white/[0.06] text-white hover:bg-white/10 rounded-xl h-11 px-6">
+                      <Upload className="w-4 h-4"/>{avatar?'Change photo':'Choose photo'}
+                    </Button>
+                    <p className="text-xs text-white/30 text-center max-w-xs">
+                      Upload, paste a URL, or pick a built-in avatar. You can crop and adjust position too.
+                    </p>
+                  </div>
+                  <div className="flex gap-3">
+                    <Button variant="outline" onClick={()=>{setStep(1);setError('');}}
+                      className="flex-1 h-11 border border-white/15 bg-white/[0.06] text-white hover:bg-white/10 rounded-xl">Back</Button>
+                    <Button onClick={()=>{setError('');setStep(3);sendCode();}}
+                      className="flex-1 h-11 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-xl gap-2">
+                      {avatar?'Looks great!':'Skip for now'} <ArrowRight className="w-4 h-4"/>
+                    </Button>
+                  </div>
+                  <AvatarPicker currentAvatar={avatar} userName={form.name} userEmail={form.email}
+                    open={pickerOpen} onClose={()=>setPickerOpen(false)}
+                    onSave={d=>{setAvatar(d);setPickerOpen(false);}}/>
+                </motion.div>
+              )}
 
-          <p className="text-center text-sm text-gray-500 mt-7">
-            Already have an account? <Link to="/login" className="font-semibold text-blue-600 hover:underline">Sign in</Link>
+              {/* ── Step 3: Verify email ── */}
+              {step===3&&(
+                <motion.div key="s3" initial={{opacity:0,x:20}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-20}} transition={{duration:0.2}}>
+                  <div className="flex flex-col items-center text-center mb-7">
+                    <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${codeVerified?'bg-green-500/20 ring-2 ring-green-500/40':'bg-blue-500/15 ring-2 ring-blue-500/30'}`}>
+                      {codeVerified?<CheckCircle className="w-8 h-8 text-green-400"/>:<ShieldCheck className="w-8 h-8 text-blue-400"/>}
+                    </div>
+                    <h2 className="text-2xl font-black text-white mb-2">{codeVerified?'Email verified!':'Verify your email'}</h2>
+                    <p className="text-white/40 text-sm max-w-sm">
+                      {codeVerified?'Your account is ready. Continue to choose your level.'
+                        :<>We sent a 6-digit code to <strong className="text-white/70">{form.email}</strong></>}
+                    </p>
+                  </div>
+                  {!codeVerified&&(
+                    <>
+                      {secretCode&&!codeSending&&(
+                        <div className="mb-5 p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl text-center">
+                          <p className="text-xs text-blue-400 font-semibold mb-1">📧 Demo mode — code shown here</p>
+                          <p className="text-3xl font-mono font-black tracking-[0.3em] text-white">{secretCode}</p>
+                          {timeLeft>0?<p className="text-xs text-white/40 mt-1">Expires in {Math.floor(timeLeft/60)}:{String(timeLeft%60).padStart(2,'0')}</p>
+                            :<p className="text-xs text-red-400 mt-1">Code expired</p>}
+                        </div>
+                      )}
+                      <div className="flex gap-2 justify-center mb-5">
+                        {Array.from({length:6}).map((_,i)=>(
+                          <input key={i} ref={otpRefs[i]} type="text" inputMode="numeric" maxLength={1}
+                            value={enteredCode[i]||''}
+                            onChange={e=>handleOtpDigit(i,e.target.value)}
+                            onKeyDown={e=>handleOtpKey(i,e)}
+                            className="w-11 h-14 text-center text-xl font-black bg-white/[0.07] border border-white/15 rounded-xl text-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 transition-all"
+                          />
+                        ))}
+                      </div>
+                      <ErrBanner/>
+                      <Button onClick={verifyCode} disabled={enteredCode.length<6}
+                        className="w-full h-12 text-base font-bold bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl mb-3">
+                        Verify code
+                      </Button>
+                      <div className="flex items-center justify-center gap-2 text-sm text-white/40">
+                        Didn't get it?
+                        <button onClick={sendCode} disabled={codeSending||timeLeft>240}
+                          className="flex items-center gap-1 text-blue-400 hover:text-blue-300 font-medium disabled:opacity-40">
+                          <RefreshCw className={`w-3.5 h-3.5 ${codeSending?'animate-spin':''}`}/>
+                          {codeSending?'Sending…':timeLeft>240?`Resend in ${timeLeft-240}s`:'Resend code'}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                  {codeVerified&&(
+                    <Button onClick={()=>{setStep(4);setError('');}}
+                      className="w-full h-12 text-base font-bold bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl mt-2 gap-2">
+                      Continue <ArrowRight className="w-4 h-4"/>
+                    </Button>
+                  )}
+                </motion.div>
+              )}
+
+              {/* ── Step 4: Exam level ── */}
+              {step===4&&(
+                <motion.div key="s4" initial={{opacity:0,x:20}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-20}} transition={{duration:0.2}}>
+                  <h2 className="text-2xl font-black text-white mb-1">Choose your level</h2>
+                  <p className="text-white/40 text-sm mb-6">Which Cambridge qualification are you preparing for?</p>
+                  <div className="space-y-3 mb-6">
+                    {[
+                      {l:'IGCSE',        desc:'International General Certificate of Secondary Education', emoji:'📘'},
+                      {l:'AS & A-Level', desc:'General Certificate of Education — Advanced Level',       emoji:'📙'},
+                      {l:'O-Level',      desc:'General Certificate of Education — Ordinary Level',       emoji:'📗'},
+                    ].map(({l,desc,emoji})=>(
+                      <button key={l} onClick={()=>setLevel(l)}
+                        className={`w-full flex items-center gap-4 p-4 rounded-2xl border text-left transition-all ${
+                          level===l
+                            ? 'border-blue-500/60 bg-blue-500/15 shadow-lg shadow-blue-900/30'
+                            : 'border-white/10 bg-white/[0.04] hover:border-white/20 hover:bg-white/[0.07]'
+                        }`}>
+                        <span className="text-2xl">{emoji}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className={`font-bold text-base ${level===l?'text-blue-300':'text-white'}`}>{l}</p>
+                          <p className="text-xs text-white/40 mt-0.5 truncate">{desc}</p>
+                        </div>
+                        {level===l&&<CheckCircle className="w-5 h-5 text-blue-400 flex-shrink-0"/>}
+                      </button>
+                    ))}
+                  </div>
+                  <ErrBanner/>
+                  <div className="flex gap-3">
+                    <Button variant="outline" onClick={()=>{setStep(3);setError('');}}
+                      className="flex-1 h-11 border border-white/15 bg-white/[0.06] text-white hover:bg-white/10 rounded-xl">Back</Button>
+                    <Button onClick={handleSubmit} disabled={loading||!level}
+                      className="flex-1 h-12 text-base font-bold bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl shadow-lg shadow-blue-900/40 gap-2">
+                      {loading?<><Loader2 className="w-4 h-4 animate-spin"/>Creating…</>:<>Get started! <ArrowRight className="w-4 h-4"/></>}
+                    </Button>
+                  </div>
+                </motion.div>
+              )}
+
+            </AnimatePresence>
+          </div>
+
+          <p className="text-center text-white/30 text-sm mt-6">
+            Already have an account?{' '}
+            <Link to="/login" className="font-bold text-blue-400 hover:text-blue-300 transition-colors">Sign in</Link>
           </p>
         </motion.div>
       </div>

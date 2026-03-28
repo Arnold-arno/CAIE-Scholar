@@ -13,7 +13,11 @@ import { useAppContext } from '@/context/AppContext';
 import AvatarCircle from '@/components/ui/avatar';
 import AvatarPicker from '@/components/ui/avatar-picker';
 import { SelectionReader } from '@/components/ui/read-aloud';
+import KeyboardShortcuts from '@/components/ui/keyboard-shortcuts';
+import BackToTop from '@/components/ui/back-to-top';
+import PageProgress from '@/components/ui/page-progress';
 import { toast } from 'sonner';
+import { useI18n } from '@/context/I18nContext';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -207,7 +211,7 @@ function ProfileDropdown({ currentUser, onClose, onLogout, navigate }) {
           <hr className="my-1.5 border-gray-100 dark:border-[hsl(222,18%,18%)]"/>
           <button onClick={onLogout}
             className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors">
-            <LogOut className="w-4 h-4"/>Sign out
+            <LogOut className="w-4 h-4"/>{t('nav.signOut')}
           </button>
         </div>
       </motion.div>
@@ -230,6 +234,7 @@ export default function Layout({ children }) {
   const [profileOpen, setProfileOpen] = useState(false);
 
   const { isLoggedIn, currentUser, logout } = useAppContext();
+  const { t } = useI18n();
 
   // Apply dark class to <html> on mount and toggle
   useEffect(() => {
@@ -271,9 +276,15 @@ export default function Layout({ children }) {
   return (
     <>
       <SelectionReader />
+      <PageProgress />
+      {/* Skip to main content — accessibility */}
+      <a href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[500] focus:px-4 focus:py-2 focus:bg-blue-600 focus:text-white focus:rounded-xl focus:font-bold">
+        Skip to main content
+      </a>
 
       {/* ── Top Navbar ──────────────────────────────────────────────────── */}
-      <nav className="bg-white dark:bg-[hsl(222,26%,10%)] border-b border-gray-200 dark:border-[hsl(222,18%,18%)] sticky top-0 z-50 shadow-sm">
+      <nav role="navigation" aria-label="Main navigation" className="bg-white dark:bg-[hsl(222,26%,10%)] border-b border-gray-200 dark:border-[hsl(222,18%,18%)] sticky top-0 z-50 shadow-sm">
         <div className="max-w-full px-4 sm:px-6 flex items-center justify-between h-16 gap-3">
 
           {/* Logo */}
@@ -316,6 +327,9 @@ export default function Layout({ children }) {
 
             <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-0.5" />
 
+            {/* Keyboard shortcuts */}
+            <KeyboardShortcuts />
+
             {/* Command palette */}
             <Button variant="ghost" size="sm" onClick={() => setPaletteOpen(true)}
               className="text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200 gap-1 text-xs border border-gray-200 dark:border-gray-700 rounded-lg px-2.5">
@@ -353,8 +367,8 @@ export default function Layout({ children }) {
               </div>
             ) : (
               <div className="flex items-center gap-1">
-                <Link to="/login"><Button variant="ghost" size="sm" className="text-xs dark:text-gray-300">Sign in</Button></Link>
-                <Link to="/signup"><Button size="sm" className="bg-gradient-to-r from-blue-700 to-indigo-700 text-white text-xs">Sign up</Button></Link>
+                <Link to="/login"><Button variant="ghost" size="sm" className="text-xs dark:text-gray-300">{t('nav.signIn')}</Button></Link>
+                <Link to="/signup"><Button size="sm" className="bg-gradient-to-r from-blue-700 to-indigo-700 text-white text-xs">{t('nav.signUp')}</Button></Link>
               </div>
             )}
           </div>
@@ -412,7 +426,7 @@ export default function Layout({ children }) {
                 {isLoggedIn
                   ? <button onClick={() => { handleLogout(); setMenuOpen(false); }}
                       className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg">
-                      <LogOut className="w-4 h-4"/>Sign out
+                      <LogOut className="w-4 h-4"/>{t('nav.signOut')}
                     </button>
                   : <>
                       <Link to="/login"  onClick={() => setMenuOpen(false)}><Button variant="ghost" className="w-full justify-start dark:text-gray-300">Sign in</Button></Link>
@@ -441,7 +455,8 @@ export default function Layout({ children }) {
       </nav>
 
       {/* Page content */}
-      <main className="min-h-screen bg-background dark:bg-[hsl(222,28%,8%)]">{children}</main>
+      <main id="main-content" className="min-h-screen bg-background dark:bg-[hsl(222,28%,8%)]">{children}</main>
+      <BackToTop />
 
       {/* Footer */}
       <footer className="bg-gray-900 dark:bg-[hsl(222,30%,6%)] text-gray-400 py-10">

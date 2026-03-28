@@ -1,31 +1,279 @@
 /**
- * AvatarPicker.jsx
+ * avatar-picker.jsx
  *
- * Full-featured avatar selection modal with four tabs:
- *   1. Upload  — from PC (file picker, drag-and-drop)
- *   2. URL     — paste any image URL or Google Photos shared link
- *   3. Built-in — 24 study-themed SVG avatars to choose from
- *   4. Remove  — clear avatar and return to initials
+ * Full-featured avatar selection modal with:
+ *   1. Upload  — drag-and-drop or file browse
+ *   2. URL     — paste any direct image URL
+ *   3. Built-in — 24 study-themed SVG avatars
+ *   4. Remove  — clear and use initials
  *
- * Usage:
- *   <AvatarPicker
- *     currentAvatar={user.avatar}
- *     userName={user.name}
- *     open={open}
- *     onClose={() => setOpen(false)}
- *     onSave={(dataUrl) => updateProfile({ avatar: dataUrl })}
- *   />
+ * NEW: Interactive crop editor on the Upload tab
+ *   - Zoom slider (0.5× – 3×)
+ *   - Drag to reposition the crop window
+ *   - Live 128px preview circle
+ *   - Saves the cropped region to a 256×256 JPEG
  */
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Upload, Link2, Palette, Trash2, X, Check, Loader2,
-  AlertCircle, Image as ImageIcon,
+  AlertCircle, ZoomIn, ZoomOut, Move, RotateCcw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import AvatarCircle from '@/components/ui/avatar';
 
-// ── Canvas resize helper ──────────────────────────────────────────────────────
+// ── Crop canvas helper ────────────────────────────────────────────────────────
+function cropToDataUrl(img, offsetX, offsetY, zoom, outputSize = 256) {
+  const cv  = document.createElement('canvas');
+  cv.width  = outputSize;
+  cv.height = outputSize;
+  const ctx = cv.getContext('2d');
+
+  // The crop window in image-pixel space
+  const cropSize = Math.min(img.naturalWidth, img.naturalHeight) / zoom;
+  const cx = Math.max(0, Math.min(img.naturalWidth  - cropSize, offsetX));
+  const cy = Math.max(0, Math.min(img.naturalHeight - cropSize, offsetY));
+
+  ctx.drawImage(img, cx, cy, cropSize, cropSize, 0, 0, outputSize, outputSize);
+  return cv.toDataURL('image/jpeg', 0.88);
+}
+
+// ── Interactive crop editor ───────────────────────────────────────────────────
+function CropEditor({ src, onConfirm, onCancel }) {
+  const [zoom,    setZoom]    = useState(1);
+  const [offset,  setOffset]  = useState({ x: 0, y: 0 });   // in image pixels
+  const [dragging,setDragging]= useState(false);
+  const [preview, setPreview] = useState(src);
+  const dragStart = useRef(null);
+  const imgRef    = useRef(null);
+  const DISPLAY   = 280; // px — the square crop preview container
+
+  // Update preview whenever zoom/offset changes
+  useEffect(() => {
+    if (!imgRef.current || !imgRef.current.complete) return;
+    try {
+      const url = cropToDataUrl(imgRef.current, offset.x, offset.y, zoom);
+      setPreview(url);
+    } catch {}
+  }, [zoom, offset]);
+
+  const handleImgLoad = () => {
+    if (!imgRef.current) return;
+    const img = imgRef.current;
+    // Centre the crop
+    const cropSize = Math.min(img.naturalWidth, img.naturalHeight) / zoom;
+    setOffset({
+      x: (img.naturalWidth  - cropSize) / 2,
+      y: (img.naturalHeight - cropSize) / 2,
+    });
+    try { setPreview(cropToDataUrl(img, (img.naturalWidth-cropSize)/2, (img.naturalHeight-cropSize)/2, zoom)); } catch {}
+  };
+
+  const onMouseDown = (e) => {
+    e.preventDefault();
+    setDragging(true);
+    dragStart.current = { mouseX: e.clientX, mouseY: e.clientY, ox: offset.x, oy: offset.y };
+  };
+  const onMouseMove = useCallback((e) => {
+    if (!dragging || !dragStart.current || !imgRef.current) return;
+    const img = imgRef.current;
+    const cropSize = Math.min(img.naturalWidth, img.naturalHeight) / zoom;
+    // Scale: DISPLAY px maps to cropSize image px
+    const scale = cropSize / DISPLAY;
+    const dx = (e.clientX - dragStart.current.mouseX) * scale;
+    const dy = (e.clientY - dragStart.current.mouseY) * scale;
+    const nx = Math.max(0, Math.min(img.naturalWidth  - cropSize, dragStart.current.ox - dx));
+    const ny = Math.max(0, Math.min(img.naturalHeight - cropSize, dragStart.current.oy - dy));
+    setOffset({ x: nx, y: ny });
+  }, [dragging, zoom]);
+  const onMouseUp = useCallback(() => { setDragging(false); }, []);
+
+  useEffect(() => {
+    if (dragging) {
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup',   onMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup',   onMouseUp);
+    };
+  }, [dragging, onMouseMove, onMouseUp]);
+
+  // Touch support
+  const onTouchStart = (e) => {
+    const t = e.touches[0];
+    setDragging(true);
+    dragStart.current = { mouseX: t.clientX, mouseY: t.clientY, ox: offset.x, oy: offset.y };
+  };
+  const onTouchMove = (e) => {
+    if (!dragging || !dragStart.current || !imgRef.current) return;
+    const t  = e.touches[0];
+    const img = imgRef.current;
+    const cropSize = Math.min(img.naturalWidth, img.naturalHeight) / zoom;
+    const scale = cropSize / DISPLAY;
+    const dx = (t.clientX - dragStart.current.mouseX) * scale;
+    const dy = (t.clientY - dragStart.current.mouseY) * scale;
+    const nx = Math.max(0, Math.min(img.naturalWidth  - cropSize, dragStart.current.ox - dx));
+    const ny = Math.max(0, Math.min(img.naturalHeight - cropSize, dragStart.current.oy - dy));
+    setOffset({ x: nx, y: ny });
+  };
+
+  const handleConfirm = () => {
+    if (!imgRef.current) return;
+    const url = cropToDataUrl(imgRef.current, offset.x, offset.y, zoom);
+    onConfirm(url);
+  };
+
+  const reset = () => {
+    setZoom(1);
+    if (imgRef.current) {
+      const img = imgRef.current;
+      const cropSize = Math.min(img.naturalWidth, img.naturalHeight);
+      setOffset({ x:(img.naturalWidth-cropSize)/2, y:(img.naturalHeight-cropSize)/2 });
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
+        <Move className="w-4 h-4 text-blue-500"/>
+        Drag to reposition · Use slider to zoom
+      </p>
+
+      {/* Crop viewport */}
+      <div className="flex gap-5 items-start flex-wrap">
+        <div
+          className="relative rounded-2xl overflow-hidden border-2 border-blue-400/50 cursor-move select-none flex-shrink-0"
+          style={{ width: DISPLAY, height: DISPLAY }}
+          onMouseDown={onMouseDown}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={() => setDragging(false)}
+        >
+          {/* Actual image — we translate it so the crop area stays centred */}
+          <img
+            ref={imgRef}
+            src={src}
+            alt="Crop source"
+            crossOrigin="anonymous"
+            draggable={false}
+            onLoad={handleImgLoad}
+            className="absolute top-0 left-0 pointer-events-none"
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              objectPosition: imgRef.current
+                ? `${-offset.x / (imgRef.current.naturalWidth  - Math.min(imgRef.current.naturalWidth,imgRef.current.naturalHeight)/zoom) * 100}% ${-offset.y / (imgRef.current.naturalHeight - Math.min(imgRef.current.naturalWidth,imgRef.current.naturalHeight)/zoom) * 100}%`
+                : 'center',
+              transform: `scale(${zoom})`,
+              transformOrigin: 'center',
+            }}
+          />
+          {/* Circular mask overlay */}
+          <div className="absolute inset-0 pointer-events-none" style={{
+            background: 'radial-gradient(circle at center, transparent 46%, rgba(0,0,0,0.55) 47%)'
+          }}/>
+          {/* Corner guides */}
+          {[['top-2 left-2','border-t-2 border-l-2'],['top-2 right-2','border-t-2 border-r-2'],
+            ['bottom-2 left-2','border-b-2 border-l-2'],['bottom-2 right-2','border-b-2 border-r-2']
+          ].map(([pos,border],i)=>(
+            <div key={i} className={`absolute ${pos} w-5 h-5 ${border} border-white/80`}/>
+          ))}
+          {/* Drag hint */}
+          {!dragging && (
+            <div className="absolute bottom-2 inset-x-0 flex justify-center pointer-events-none">
+              <span className="text-[10px] bg-black/50 text-white/70 px-2 py-0.5 rounded-full">Drag to reposition</span>
+            </div>
+          )}
+        </div>
+
+        {/* Right panel — preview + controls */}
+        <div className="flex flex-col gap-3 flex-1 min-w-[140px]">
+          {/* Live preview */}
+          <div className="text-center">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Preview</p>
+            <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-blue-400/40 mx-auto shadow-lg">
+              <img src={preview} alt="Preview" className="w-full h-full object-cover"/>
+            </div>
+          </div>
+
+          {/* Zoom */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs font-semibold text-gray-600 dark:text-gray-400">Zoom</p>
+              <span className="text-xs text-gray-400">{zoom.toFixed(1)}×</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={()=>setZoom(z=>Math.max(0.5,z-0.1))}
+                className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-[hsl(222,22%,18%)] flex items-center justify-center hover:bg-gray-200 transition-colors">
+                <ZoomOut className="w-3.5 h-3.5 text-gray-500"/>
+              </button>
+              <input type="range" min="0.5" max="3" step="0.05" value={zoom}
+                onChange={e=>setZoom(parseFloat(e.target.value))}
+                className="flex-1 accent-blue-500"/>
+              <button onClick={()=>setZoom(z=>Math.min(3,z+0.1))}
+                className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-[hsl(222,22%,18%)] flex items-center justify-center hover:bg-gray-200 transition-colors">
+                <ZoomIn className="w-3.5 h-3.5 text-gray-500"/>
+              </button>
+            </div>
+          </div>
+
+          {/* Reset */}
+          <button onClick={reset}
+            className="flex items-center justify-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors py-1.5 border border-dashed border-gray-300 dark:border-[hsl(222,18%,24%)] rounded-xl">
+            <RotateCcw className="w-3.5 h-3.5"/>Reset crop
+          </button>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-3 pt-1">
+        <Button variant="outline" onClick={onCancel} className="flex-1 rounded-xl border-2 text-sm h-10">
+          Back
+        </Button>
+        <Button onClick={handleConfirm}
+          className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl gap-2 text-sm h-10">
+          <Check className="w-4 h-4"/>Use this photo
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ── Built-in avatar data ──────────────────────────────────────────────────────
+const BUILT_INS = [
+  {id:'owl',   emoji:'🦉', bg:'from-indigo-500 to-purple-600'},
+  {id:'rocket',emoji:'🚀', bg:'from-blue-500 to-cyan-500'},
+  {id:'star',  emoji:'⭐', bg:'from-yellow-400 to-orange-500'},
+  {id:'book',  emoji:'📚', bg:'from-green-500 to-teal-600'},
+  {id:'atom',  emoji:'⚛️', bg:'from-purple-500 to-pink-500'},
+  {id:'brain', emoji:'🧠', bg:'from-red-500 to-rose-600'},
+  {id:'grad',  emoji:'🎓', bg:'from-blue-600 to-indigo-700'},
+  {id:'calc',  emoji:'🔢', bg:'from-gray-600 to-slate-700'},
+  {id:'dna',   emoji:'🧬', bg:'from-teal-500 to-cyan-600'},
+  {id:'globe', emoji:'🌍', bg:'from-blue-400 to-green-500'},
+  {id:'fire',  emoji:'🔥', bg:'from-orange-500 to-red-600'},
+  {id:'moon',  emoji:'🌙', bg:'from-indigo-700 to-slate-800'},
+  {id:'bolt',  emoji:'⚡', bg:'from-yellow-400 to-amber-500'},
+  {id:'flask', emoji:'⚗️', bg:'from-emerald-500 to-teal-700'},
+  {id:'micro', emoji:'🔬', bg:'from-violet-500 to-fuchsia-600'},
+  {id:'comp',  emoji:'💻', bg:'from-slate-600 to-blue-700'},
+];
+
+function builtInToDataUrl(avatar) {
+  const cv  = document.createElement('canvas');
+  cv.width  = 256; cv.height = 256;
+  const ctx = cv.getContext('2d');
+  const grad = ctx.createLinearGradient(0,0,256,256);
+  grad.addColorStop(0, '#6366f1'); grad.addColorStop(1, '#8b5cf6');
+  ctx.fillStyle = grad; ctx.fillRect(0,0,256,256);
+  ctx.font = '120px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(avatar.emoji, 128, 140);
+  try { return cv.toDataURL('image/png'); } catch { return null; }
+}
+
+// ── Export resize helper (used by Signup) ─────────────────────────────────────
 export async function resizeImageFile(file) {
   return new Promise((resolve, reject) => {
     if (!file.type.startsWith('image/')) { reject(new Error('Not an image file')); return; }
@@ -35,9 +283,9 @@ export async function resizeImageFile(file) {
       const SIZE = 256;
       const cv   = document.createElement('canvas');
       cv.width = SIZE; cv.height = SIZE;
-      const ctx = cv.getContext('2d');
-      const min = Math.min(img.width, img.height);
-      ctx.drawImage(img, (img.width - min) / 2, (img.height - min) / 2, min, min, 0, 0, SIZE, SIZE);
+      const ctx  = cv.getContext('2d');
+      const min  = Math.min(img.width, img.height);
+      ctx.drawImage(img, (img.width-min)/2, (img.height-min)/2, min, min, 0, 0, SIZE, SIZE);
       URL.revokeObjectURL(url);
       resolve(cv.toDataURL('image/jpeg', 0.88));
     };
@@ -46,381 +294,223 @@ export async function resizeImageFile(file) {
   });
 }
 
-async function resizeImageUrl(src) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const SIZE = 256;
-      const cv   = document.createElement('canvas');
-      cv.width = SIZE; cv.height = SIZE;
-      const ctx = cv.getContext('2d');
-      const min = Math.min(img.width, img.height);
-      ctx.drawImage(img, (img.width - min) / 2, (img.height - min) / 2, min, min, 0, 0, SIZE, SIZE);
-      try {
-        resolve(cv.toDataURL('image/jpeg', 0.88));
-      } catch {
-        // CORS block on canvas — fall back to using the URL directly
-        resolve(src);
-      }
-    };
-    img.onerror = () => reject(new Error('Could not load image from URL. Check the link is a direct image URL.'));
-    img.src = src;
-  });
-}
-
-// ── 24 built-in SVG avatar designs ───────────────────────────────────────────
-// Each is a self-contained SVG data-URL — study / academic themed
-
-const BG_PAIRS = [
-  ['#dbeafe','#1d4ed8'], ['#dcfce7','#15803d'], ['#fef3c7','#b45309'],
-  ['#ede9fe','#6d28d9'], ['#fee2e2','#b91c1c'], ['#cffafe','#0e7490'],
-  ['#fce7f3','#9d174d'], ['#d1fae5','#065f46'], ['#fef9c3','#a16207'],
-  ['#e0f2fe','#0369a1'], ['#f3e8ff','#7e22ce'], ['#ecfdf5','#047857'],
-];
-
-// SVG paths for 6 icon shapes used across avatars
-const ICONS = {
-  book:     'M6 3h13v18H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3zm0 0v18m4-11h6m-6 4h6',
-  cap:      'M22 10L12 5 2 10l10 5 10-5zm-10 5v6M6.5 12.5v4a7 7 0 0 0 11 0v-4',
-  pencil:   'M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z',
-  star:     'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
-  atom:     'M12 12m-1 0a1 1 0 1 0 2 0 1 1 0 0 0-2 0M12 2a10 10 0 0 1 0 20 10 10 0 0 1 0-20zM2 12h20M12 2c2.76 4.5 2.76 15.5 0 20M12 2c-2.76 4.5-2.76 15.5 0 20',
-  bulb:     'M9 21h6m-3-18a7 7 0 0 1 4 12.9V16H8v-2.1A7 7 0 0 1 12 3z',
-  flask:    'M9 3h6m-3 0v5L5.5 15a5 5 0 0 0 13 0L14 8V3',
-  globe:    'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM2 12h20M12 2c2.76 4.5 2.76 15.5 0 20M12 2c-2.76 4.5-2.76 15.5 0 20',
-};
-
-const ICON_KEYS = Object.keys(ICONS);
-
-function makeSvgAvatar(bg, fg, iconKey) {
-  const path = ICONS[iconKey];
-  const svg  = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
-    <rect width="40" height="40" fill="${bg}" rx="20"/>
-    <g transform="translate(8,8)" fill="none" stroke="${fg}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-      <path d="${path}"/>
-    </g>
-  </svg>`;
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-}
-
-// Generate 24 built-in avatars
-const BUILTIN_AVATARS = BG_PAIRS.flatMap(([bg, fg], i) =>
-  [ICON_KEYS[i % ICON_KEYS.length], ICON_KEYS[(i + 3) % ICON_KEYS.length]].map(icon => ({
-    id:  `builtin-${i}-${icon}`,
-    src: makeSvgAvatar(bg, fg, icon),
-    bg, fg, icon,
-  }))
-);
-
-// ── Tab definitions ───────────────────────────────────────────────────────────
-const TABS = [
-  { id: 'upload',  label: 'Upload',    icon: Upload  },
-  { id: 'url',     label: 'From URL',  icon: Link2   },
-  { id: 'builtin', label: 'Avatars',   icon: Palette },
-  { id: 'remove',  label: 'Remove',    icon: Trash2  },
-];
-
-// ── Main modal ────────────────────────────────────────────────────────────────
+// ── Main AvatarPicker component ───────────────────────────────────────────────
 export default function AvatarPicker({ currentAvatar, userName, userEmail, open, onClose, onSave }) {
-  const [tab,      setTab]      = useState('upload');
-  const [urlInput, setUrlInput] = useState('');
-  const [preview,  setPreview]  = useState(currentAvatar || null);
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState('');
-  const [dragging, setDragging] = useState(false);
+  const [tab,        setTab]        = useState('upload');
+  const [urlInput,   setUrlInput]   = useState('');
+  const [urlLoading, setUrlLoading] = useState(false);
+  const [urlError,   setUrlError]   = useState('');
+  const [selected,   setSelected]   = useState(null);   // built-in selection
+  const [dragging,   setDragging]   = useState(false);
+  const [cropSrc,    setCropSrc]    = useState(null);   // raw image src for crop editor
+  const [fileLoading,setFileLoading]= useState(false);
   const fileRef = useRef(null);
 
-  // Reset state when modal opens
-  useEffect(() => {
-    if (open) {
-      setPreview(currentAvatar || null);
-      setUrlInput('');
-      setError('');
-      setTab('upload');
-    }
-  }, [open, currentAvatar]);
-
-  // Keyboard: Escape to close
-  useEffect(() => {
-    if (!open) return;
-    const h = (e) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [open, onClose]);
+  const previewUser = useMemo(() => ({ name: userName, email: userEmail, avatar: currentAvatar }), [userName, userEmail, currentAvatar]);
 
   const handleFile = useCallback(async (file) => {
     if (!file) return;
-    setLoading(true); setError('');
+    if (!file.type.startsWith('image/')) { return; }
+    if (file.size > 8 * 1024 * 1024) { return; }
+    setFileLoading(true);
     try {
-      const data = await resizeImageFile(file);
-      setPreview(data);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
+      const url = URL.createObjectURL(file);
+      setCropSrc(url);  // Open crop editor instead of saving directly
+    } catch {}
+    finally { setFileLoading(false); }
   }, []);
-
-  const handleFileInput = (e) => { handleFile(e.target.files?.[0]); e.target.value = ''; };
 
   const handleDrop = (e) => {
     e.preventDefault(); setDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) handleFile(file);
+    handleFile(e.dataTransfer.files?.[0]);
   };
 
   const handleUrlLoad = async () => {
-    if (!urlInput.trim()) { setError('Please enter a URL'); return; }
-    setLoading(true); setError('');
+    const u = urlInput.trim();
+    if (!u) return;
+    setUrlLoading(true); setUrlError('');
     try {
-      // Handle Google Photos share URLs — they end in ?... not in an image extension.
-      // We can't proxy them, so we use them as-is as an img src (browser fetches).
-      // For direct image URLs (jpg/png/etc) we try canvas resize.
-      const isGooglePhotos = urlInput.includes('photos.google.com') || urlInput.includes('lh3.googleusercontent.com');
-      if (isGooglePhotos) {
-        // Google Photos: use URL directly as src — we can't canvas-resize cross-origin
-        setPreview(urlInput.trim());
-      } else {
-        const data = await resizeImageUrl(urlInput.trim());
-        setPreview(data);
-      }
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
+      // Try direct load first
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      await new Promise((res, rej) => {
+        img.onload = res;
+        img.onerror = rej;
+        img.src = u;
+        setTimeout(rej, 8000);
+      });
+      setCropSrc(u);
+      setTab('upload'); // Show crop editor
+    } catch {
+      // Fallback: use as-is (may be cross-origin)
+      onSave(u); onClose();
+    } finally { setUrlLoading(false); }
   };
 
-  const handleSave = () => {
-    if (tab === 'remove') { onSave(null); onClose(); return; }
-    if (!preview) { setError('Please select or upload an image first'); return; }
-    onSave(preview);
+  const handleCropConfirm = (dataUrl) => {
+    setCropSrc(null);
+    onSave(dataUrl);
     onClose();
   };
 
-  const dummyUser = { name: userName, email: userEmail, avatar: preview };
+  const handleBuiltIn = (av) => {
+    const url = builtInToDataUrl(av);
+    if (url) { onSave(url); onClose(); }
+    else { onSave(av.emoji); onClose(); }
+  };
 
-  if (!open) return null;
+  const TABS = [
+    { id: 'upload',   label: 'Upload',    icon: Upload },
+    { id: 'url',      label: 'From URL',  icon: Link2 },
+    { id: 'builtin',  label: 'Built-in',  icon: Palette },
+    { id: 'remove',   label: 'Remove',    icon: Trash2 },
+  ];
 
   return (
     <AnimatePresence>
       {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={onClose}
-        >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.94, y: 12 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.94, y: 12 }}
-            transition={{ duration: 0.18 }}
-            className="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden"
-            onClick={e => e.stopPropagation()}
-          >
+        <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+          className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm"
+          onClick={onClose}>
+          <motion.div initial={{ opacity:0, scale:0.94, y:16 }} animate={{ opacity:1, scale:1, y:0 }}
+            exit={{ opacity:0, scale:0.94, y:16 }} transition={{ type:'spring', stiffness:360, damping:28 }}
+            className="w-full max-w-lg bg-white dark:bg-[hsl(222,24%,11%)] rounded-2xl shadow-2xl border border-gray-200 dark:border-[hsl(222,18%,22%)] overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-[hsl(222,18%,18%)] bg-gradient-to-r from-gray-50 to-blue-50 dark:from-[hsl(222,26%,13%)] dark:to-[hsl(235,22%,14%)]">
               <div className="flex items-center gap-3">
-                <AvatarCircle user={dummyUser} size={44} className="ring-2 ring-white shadow-sm" />
+                <div className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-blue-200 dark:ring-blue-800">
+                  <AvatarCircle user={previewUser} size={40}/>
+                </div>
                 <div>
-                  <p className="font-semibold text-gray-900 text-sm">{userName || userEmail || 'Your avatar'}</p>
-                  <p className="text-xs text-gray-500">Choose how you'd like to set your profile photo</p>
+                  <p className="font-bold text-gray-900 dark:text-gray-100 text-sm">Profile photo</p>
+                  <p className="text-xs text-gray-400">{userName || 'Change your photo'}</p>
                 </div>
               </div>
-              <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-                <X className="w-5 h-5" />
+              <button onClick={onClose} className="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-gray-200 dark:hover:bg-[hsl(222,22%,18%)] text-gray-400 transition-colors">
+                <X className="w-4 h-4"/>
               </button>
             </div>
 
-            {/* Tabs */}
-            <div className="flex border-b border-gray-100 bg-gray-50">
-              {TABS.map(t => (
-                <button key={t.id} onClick={() => { setTab(t.id); setError(''); }}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-semibold transition-all ${
-                    tab === t.id
-                      ? 'text-blue-700 border-b-2 border-blue-600 bg-white'
-                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+            {/* Tab bar */}
+            <div className="flex border-b border-gray-100 dark:border-[hsl(222,18%,18%)]">
+              {TABS.map(({ id, label, icon: Icon }) => (
+                <button key={id} onClick={() => { setTab(id); setCropSrc(null); }}
+                  className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs font-semibold transition-colors border-b-2 ${
+                    tab === id
+                      ? 'border-blue-500 text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/10'
+                      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                   }`}>
-                  <t.icon className="w-3.5 h-3.5" />
-                  {t.label}
+                  <Icon className="w-4 h-4"/>
+                  <span className="hidden sm:block">{label}</span>
                 </button>
               ))}
             </div>
 
-            {/* Tab content */}
-            <div className="p-5" style={{ minHeight: 280 }}>
-              <AnimatePresence mode="wait">
+            {/* Content */}
+            <div className="p-5 min-h-[280px]">
 
-                {/* ── Upload tab ── */}
-                {tab === 'upload' && (
-                  <motion.div key="upload" initial={{opacity:0,x:8}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-8}}>
-                    <div
-                      className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${
-                        dragging ? 'border-blue-400 bg-blue-50' : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/30'
-                      }`}
-                      onClick={() => fileRef.current?.click()}
-                      onDragOver={e => { e.preventDefault(); setDragging(true); }}
-                      onDragLeave={() => setDragging(false)}
-                      onDrop={handleDrop}
-                    >
-                      {loading
-                        ? <Loader2 className="w-10 h-10 mx-auto text-blue-400 animate-spin mb-3" />
-                        : <Upload className="w-10 h-10 mx-auto text-gray-300 mb-3" />
-                      }
-                      <p className="font-semibold text-gray-700 mb-1">
-                        {loading ? 'Processing…' : 'Click to browse or drag & drop'}
-                      </p>
-                      <p className="text-xs text-gray-400">JPG, PNG, GIF, WebP — auto-cropped to square</p>
-                      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileInput} />
-                    </div>
-
-                    {/* Preview */}
-                    {preview && !loading && (
-                      <div className="mt-4 flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-xl">
-                        <AvatarCircle user={dummyUser} size={40} />
-                        <div>
-                          <p className="text-sm font-semibold text-green-800">Photo ready</p>
-                          <p className="text-xs text-green-600">Looks good! Click Save to apply.</p>
-                        </div>
-                        <button onClick={() => setPreview(null)} className="ml-auto text-gray-400 hover:text-red-500 p-1">
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
+              {/* Upload tab — shows crop editor when image selected */}
+              {tab === 'upload' && (
+                cropSrc ? (
+                  <CropEditor src={cropSrc} onConfirm={handleCropConfirm} onCancel={() => setCropSrc(null)}/>
+                ) : (
+                  <div
+                    onDragOver={e=>{e.preventDefault();setDragging(true)}}
+                    onDragLeave={()=>setDragging(false)}
+                    onDrop={handleDrop}
+                    onClick={()=>fileRef.current?.click()}
+                    className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all min-h-[200px] flex flex-col items-center justify-center ${
+                      dragging ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-300 dark:border-[hsl(222,18%,24%)] hover:border-blue-400 hover:bg-blue-50/30 dark:hover:bg-blue-900/10'
+                    }`}>
+                    <input ref={fileRef} type="file" accept="image/*" className="hidden"
+                      onChange={e=>handleFile(e.target.files?.[0])}/>
+                    {fileLoading ? (
+                      <Loader2 className="w-8 h-8 text-blue-400 animate-spin mb-2"/>
+                    ) : (
+                      <>
+                        <Upload className="w-10 h-10 text-gray-300 dark:text-gray-600 mb-3"/>
+                        <p className="font-semibold text-gray-600 dark:text-gray-400">Drop an image here</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">or click to browse</p>
+                        <p className="text-xs text-blue-500 dark:text-blue-400 mt-3 font-medium">
+                          ✨ You can zoom & reposition after selecting
+                        </p>
+                      </>
                     )}
-                  </motion.div>
-                )}
+                  </div>
+                )
+              )}
 
-                {/* ── URL tab ── */}
-                {tab === 'url' && (
-                  <motion.div key="url" initial={{opacity:0,x:8}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-8}}
-                    className="space-y-4">
+              {/* URL tab */}
+              {tab === 'url' && (
+                cropSrc ? (
+                  <CropEditor src={cropSrc} onConfirm={handleCropConfirm} onCancel={()=>setCropSrc(null)}/>
+                ) : (
+                  <div className="space-y-4">
                     <div>
-                      <label className="text-sm font-semibold text-gray-700 block mb-1.5">Image URL</label>
+                      <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 block">Direct image URL</label>
                       <div className="flex gap-2">
-                        <input
-                          value={urlInput}
-                          onChange={e => { setUrlInput(e.target.value); setError(''); }}
-                          onKeyDown={e => e.key === 'Enter' && handleUrlLoad()}
-                          placeholder="https://…  or paste a Google Photos link"
-                          className="flex-1 px-3 py-2.5 border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                        <Button onClick={handleUrlLoad} disabled={loading || !urlInput.trim()}
-                          className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 flex-shrink-0">
-                          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                        <input value={urlInput} onChange={e=>setUrlInput(e.target.value)}
+                          onKeyDown={e=>e.key==='Enter'&&handleUrlLoad()}
+                          placeholder="https://example.com/photo.jpg"
+                          className="flex-1 px-3 py-2.5 border-2 border-gray-200 dark:border-[hsl(222,18%,24%)] rounded-xl bg-white dark:bg-[hsl(222,22%,13%)] text-gray-900 dark:text-gray-100 text-sm focus:border-blue-500 focus:outline-none"/>
+                        <Button onClick={handleUrlLoad} disabled={!urlInput||urlLoading}
+                          className="bg-blue-600 text-white rounded-xl px-4 shrink-0 gap-1.5">
+                          {urlLoading?<Loader2 className="w-4 h-4 animate-spin"/>:<Check className="w-4 h-4"/>}
+                          Load
                         </Button>
                       </div>
                     </div>
-
-                    {/* Preview */}
-                    {preview && !loading && tab === 'url' && (
-                      <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-xl">
-                        <AvatarCircle user={dummyUser} size={40} />
-                        <div>
-                          <p className="text-sm font-semibold text-green-800">Photo loaded</p>
-                          <p className="text-xs text-green-600 truncate max-w-[220px]">{urlInput}</p>
-                        </div>
-                        <button onClick={() => { setPreview(null); setUrlInput(''); }} className="ml-auto text-gray-400 hover:text-red-500 p-1">
-                          <X className="w-4 h-4" />
-                        </button>
+                    {urlError && (
+                      <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl px-3 py-2 text-sm border border-red-200 dark:border-red-800">
+                        <AlertCircle className="w-4 h-4 flex-shrink-0"/>{urlError}
                       </div>
                     )}
-
-                    {/* Instructions */}
-                    <div className="bg-blue-50 rounded-xl p-4 space-y-2">
-                      <p className="text-xs font-semibold text-blue-800">How to use Google Photos:</p>
-                      <ol className="text-xs text-blue-700 space-y-1 list-decimal ml-4">
-                        <li>Open Google Photos and find your photo</li>
-                        <li>Click <strong>Share → Create link</strong></li>
-                        <li>Paste the link above and click ✓</li>
-                      </ol>
-                      <p className="text-xs text-blue-600 mt-2">
-                        <strong>Direct image URLs</strong> (ending in .jpg, .png, etc.) also work — right-click any image on the web and choose "Copy image address".
-                      </p>
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* ── Built-in avatars tab ── */}
-                {tab === 'builtin' && (
-                  <motion.div key="builtin" initial={{opacity:0,x:8}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-8}}>
-                    <p className="text-xs font-semibold text-gray-500 mb-3">Choose one of these study-themed avatars:</p>
-                    <div className="grid grid-cols-6 gap-2 max-h-52 overflow-y-auto pr-1">
-                      {BUILTIN_AVATARS.map(av => {
-                        const isSelected = preview === av.src;
-                        return (
-                          <button key={av.id} onClick={() => setPreview(av.src)}
-                            className={`relative rounded-xl overflow-hidden transition-all hover:scale-110 ${
-                              isSelected ? 'ring-3 ring-blue-500 ring-offset-2 scale-110' : 'hover:ring-2 hover:ring-blue-300'
-                            }`}>
-                            <img src={av.src} alt={av.icon} className="w-full aspect-square" />
-                            {isSelected && (
-                              <div className="absolute inset-0 bg-blue-600/20 flex items-center justify-center">
-                                <Check className="w-4 h-4 text-blue-700" />
-                              </div>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {preview && BUILTIN_AVATARS.find(a => a.src === preview) && (
-                      <div className="mt-3 flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-xl">
-                        <AvatarCircle user={dummyUser} size={36} />
-                        <p className="text-xs font-semibold text-blue-800">Avatar selected — click Save to apply</p>
-                      </div>
-                    )}
-                  </motion.div>
-                )}
-
-                {/* ── Remove tab ── */}
-                {tab === 'remove' && (
-                  <motion.div key="remove" initial={{opacity:0,x:8}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-8}}
-                    className="flex flex-col items-center justify-center py-8 gap-5">
-                    <div className="w-20 h-20 rounded-full bg-red-50 flex items-center justify-center border-2 border-red-200">
-                      <Trash2 className="w-8 h-8 text-red-400" />
-                    </div>
-                    <div className="text-center">
-                      <p className="font-semibold text-gray-800 mb-1">Remove profile photo?</p>
-                      <p className="text-sm text-gray-500">Your initials will be shown instead.</p>
-                    </div>
-                    <AvatarCircle user={{ ...dummyUser, avatar: null }} size={64} className="ring-4 ring-gray-100" />
-                    <p className="text-xs text-gray-400">This is what your profile will look like</p>
-                  </motion.div>
-                )}
-
-              </AnimatePresence>
-            </div>
-
-            {/* Error */}
-            <AnimatePresence>
-              {error && (
-                <motion.div initial={{height:0,opacity:0}} animate={{height:'auto',opacity:1}} exit={{height:0,opacity:0}}
-                  className="mx-5 mb-3">
-                  <div className="flex items-start gap-2 bg-red-50 text-red-700 rounded-xl px-4 py-3 text-sm border border-red-200">
-                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                    <span>{error}</span>
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                      Paste a direct link to a JPG, PNG, or WebP image. You can crop it after loading.
+                    </p>
                   </div>
-                </motion.div>
+                )
               )}
-            </AnimatePresence>
 
-            {/* Footer */}
-            <div className="flex gap-3 p-5 pt-3 border-t border-gray-100">
-              <Button variant="outline" onClick={onClose} className="flex-1 h-11 rounded-xl border-2">
-                Cancel
-              </Button>
-              <Button
-                onClick={handleSave}
-                disabled={tab !== 'remove' && !preview}
-                className={`flex-1 h-11 rounded-xl font-semibold ${
-                  tab === 'remove'
-                    ? 'bg-red-500 hover:bg-red-600 text-white'
-                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white'
-                }`}>
-                {tab === 'remove' ? 'Remove photo' : 'Save photo'}
-              </Button>
+              {/* Built-in avatars */}
+              {tab === 'builtin' && (
+                <div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Choose a built-in avatar:</p>
+                  <div className="grid grid-cols-8 gap-2">
+                    {BUILT_INS.map(av => (
+                      <button key={av.id}
+                        onClick={() => handleBuiltIn(av)}
+                        title={av.id}
+                        className={`w-full aspect-square rounded-xl bg-gradient-to-br ${av.bg} flex items-center justify-center text-2xl hover:scale-110 transition-transform shadow-md`}>
+                        {av.emoji}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-3 text-center">
+                    Click any avatar to use it immediately
+                  </p>
+                </div>
+              )}
+
+              {/* Remove */}
+              {tab === 'remove' && (
+                <div className="flex flex-col items-center justify-center min-h-[200px] gap-5">
+                  <div className="w-20 h-20 rounded-full overflow-hidden opacity-40 ring-2 ring-gray-300">
+                    <AvatarCircle user={previewUser} size={80}/>
+                  </div>
+                  <div className="text-center">
+                    <p className="font-semibold text-gray-700 dark:text-gray-300 mb-1">Remove profile photo?</p>
+                    <p className="text-sm text-gray-400">Your initials will be shown instead</p>
+                  </div>
+                  <Button onClick={()=>{onSave(null);onClose();}}
+                    className="bg-red-500 hover:bg-red-600 text-white rounded-xl gap-2 px-6">
+                    <Trash2 className="w-4 h-4"/>Remove photo
+                  </Button>
+                </div>
+              )}
+
             </div>
           </motion.div>
         </motion.div>

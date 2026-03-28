@@ -1,0 +1,28 @@
+{
+  "name": "CAIE Scholar",
+  "short_name": "CAIE Scholar",
+  "description": "Cambridge IGCSE, AS & A-Level, O-Level past papers with AI study notes",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#05071a",
+  "theme_color": "#1d4ed8",
+  "orientation": "any",
+  "icons": [
+    { "src": "/logo.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "categories": ["education", "productivity"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "IGCSE Study Hub",
+      "url": "/AcademicHub",
+      "description": "Go to IGCSE past papers"
+    },
+    {
+      "name": "AS & A-Level Hub",
+      "url": "/ASLevelHub",
+      "description": "Go to A-Level past papers"
+    }
+  ]
+}

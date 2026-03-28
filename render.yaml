@@ -1,28 +1,22 @@
 # render.yaml — Deploy CAIE Scholar on Render.com
 #
-# Deploy steps:
-#   1. Push this repo to GitHub
-#   2. render.com → New → Blueprint → connect your repo
-#   3. Render detects this file and creates both services automatically
-#   4. Once backend is live: copy its URL into VITE_API_URL below and redeploy frontend
+# Steps:
+#   1. Push repo to GitHub
+#   2. render.com → New → Blueprint → connect repo
+#   3. Set secret env vars in the Render dashboard (ANTHROPIC_API_KEY etc.)
+#   4. Once backend is live: copy its URL into VITE_API_URL below
 
 services:
 
-  # ── Backend (FastAPI + Gunicorn) ──────────────────────────────────────────
+  # ── Backend (FastAPI + Gunicorn) ─────────────────────────────────────────
   - type: web
     name: caiescholar-backend
     runtime: python
     region: oregon
     plan: free
     rootDir: backend
-
-    # Python version — ALSO set via .python-version and runtime.txt at repo root
-    # Render reads the repo root files first; this is an extra safety net
     pythonVersion: "3.12.3"
-
-    # pip install only — no compilation needed on Python 3.12 (all wheels pre-built)
     buildCommand: pip install -r requirements.txt
-
     startCommand: gunicorn main:app -c gunicorn.conf.py
     healthCheckPath: /api/health
 
@@ -45,6 +39,20 @@ services:
         value: "15"
       - key: SCRAPER_MAX_RETRIES
         value: "3"
+
+      # ── AI provider keys — set these in the Render dashboard as secret env vars ──
+      # At least one notes provider is required for AI Notes.
+      # OPENAI_API_KEY is also required for image generation (gpt-image-1).
+      - key: ANTHROPIC_API_KEY
+        value: ""   # Recommended — console.anthropic.com
+      - key: OPENAI_API_KEY
+        value: ""   # platform.openai.com — also enables image generation
+      - key: GROK_API_KEY
+        value: ""   # console.x.ai
+      - key: GEMINI_API_KEY
+        value: ""   # aistudio.google.com/app/apikey
+      - key: COHERE_API_KEY
+        value: ""   # dashboard.cohere.com/api-keys
 
     disk:
       name: caiescholar-data
@@ -77,4 +85,3 @@ services:
     envVars:
       - key: VITE_API_URL
         value: https://caiescholar-backend.onrender.com
-        # ↑ Replace with your actual backend URL once it's live

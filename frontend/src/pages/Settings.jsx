@@ -5,7 +5,7 @@ import React, { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   User, Bell, Moon, Sun, Volume2, Trash2, Save, Camera,
-  Shield, Globe, ChevronRight, CheckCircle, RotateCcw,
+  Shield, Globe, ChevronRight, CheckCircle, RotateCcw, Languages,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,8 @@ import { Label } from '@/components/ui/label';
 import AvatarCircle from '@/components/ui/avatar';
 import AvatarPicker from '@/components/ui/avatar-picker';
 import { useAppContext } from '@/context/AppContext';
+import { useConfirm } from '@/components/ui/confirm-dialog';
+import { useI18n, LANGUAGES } from '@/context/I18nContext';
 import { toast } from 'sonner';
 
 const SECTION = ({ id, icon: Icon, title, children }) => (
@@ -128,8 +130,9 @@ export default function Settings() {
   };
 
   const sections = [
-    { id: 'profile',    label: 'Profile',      icon: User },
-    { id: 'appearance', label: 'Appearance',   icon: darkMode ? Moon : Sun },
+    { id: 'profile',    label: t('settings.profile'),    icon: User },
+    { id: 'language',   label: t('settings.language'),   icon: Globe },
+    { id: 'appearance', label: t('settings.appearance'),  icon: darkMode ? Moon : Sun },
     { id: 'readaloud',  label: 'Read Aloud',   icon: Volume2 },
     { id: 'study',      label: 'Study',        icon: CheckCircle },
     { id: 'notifs',     label: 'Notifications',icon: Bell },
@@ -138,6 +141,7 @@ export default function Settings() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-[hsl(222,28%,8%)]">
+      <ConfirmUI />
       {/* Page header */}
       <div className="bg-gradient-to-r from-blue-800 via-blue-700 to-indigo-700 text-white">
         <div className="max-w-5xl mx-auto px-6 py-8">
@@ -208,9 +212,40 @@ export default function Settings() {
             />
           </SECTION>
 
+          {/* ── Language ── */}
+          <SECTION id="language" icon={Globe} title={t('settings.language')}>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              Choose your preferred language for the app interface. AI-generated content will adapt to your topic language automatically.
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+              {LANGUAGES.map(l => (
+                <button key={l.code} onClick={() => setLang(l.code)}
+                  className={`flex items-center gap-2.5 px-3.5 py-3 rounded-xl border-2 text-left transition-all ${
+                    lang === l.code
+                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 shadow-sm'
+                      : 'border-gray-200 dark:border-[hsl(222,18%,22%)] hover:border-gray-300 dark:hover:border-[hsl(222,18%,28%)]'
+                  }`}>
+                  <span className="text-xl leading-none">{l.flag}</span>
+                  <div className="min-w-0">
+                    <p className={`text-sm font-bold truncate ${lang === l.code ? 'text-blue-700 dark:text-blue-300' : 'text-gray-800 dark:text-gray-200'}`}>
+                      {l.nativeName}
+                    </p>
+                    <p className="text-xs text-gray-400 truncate">{l.name}</p>
+                  </div>
+                  {lang === l.code && <CheckCircle className="w-4 h-4 text-blue-500 ml-auto flex-shrink-0"/>}
+                </button>
+              ))}
+            </div>
+            {lang === 'ar' && (
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-3 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 rounded-xl border border-amber-200 dark:border-amber-800">
+                ℹ Right-to-left layout applied. Some complex UI components may still display left-to-right.
+              </p>
+            )}
+          </SECTION>
+
           {/* ── Appearance ── */}
-          <SECTION id="appearance" icon={darkMode ? Moon : Sun} title="Appearance">
-            <ROW label="Dark mode" hint="Reduces eye strain in low-light environments">
+          <SECTION id="appearance" icon={darkMode ? Moon : Sun} title={t('settings.appearance')}>
+            <ROW label={t('settings.darkMode')} hint="Reduces eye strain in low-light environments">
               <Toggle on={darkMode} onChange={toggleDark} />
             </ROW>
           </SECTION>
@@ -285,20 +320,20 @@ export default function Settings() {
             </p>
             <ROW label="Clear search history" hint="Removes recent searches from all levels">
               <Button size="sm" variant="outline"
-                onClick={() => { ['IGCSE','AS_LEVEL','O_LEVEL'].forEach(l => clearHistory(l)); toast.success('Search history cleared'); }}
+                onClick={async() => { const yes = await confirm({ title: 'Clear search history?', message: 'This will permanently remove all recent searches across IGCSE, AS & A-Level, and O-Level.', confirmLabel: t('confirm.clear'), danger: true }); if (yes) { ['IGCSE','AS_LEVEL','O_LEVEL'].forEach(l => clearHistory(l)); toast.success('Search history cleared'); } }}
                 className="rounded-xl border-2 text-red-500 border-red-200 hover:bg-red-50 dark:hover:bg-red-900/20 text-xs gap-1.5">
                 <Trash2 className="w-3.5 h-3.5" />Clear history
               </Button>
             </ROW>
             <ROW label="Clear AI notes history" hint="Removes all saved notes sessions">
               <Button size="sm" variant="outline"
-                onClick={() => { clearNotesHistory(); toast.success('Notes history cleared'); }}
+                onClick={async() => { const yes = await confirm({ title: 'Clear notes history?', message: 'All 20 saved AI notes sessions will be permanently deleted. This cannot be undone.', confirmLabel: t('confirm.clear'), danger: true }); if (yes) { clearNotesHistory(); toast.success('Notes history cleared'); } }}
                 className="rounded-xl border-2 text-red-500 border-red-200 hover:bg-red-50 dark:hover:bg-red-900/20 text-xs gap-1.5">
                 <Trash2 className="w-3.5 h-3.5" />Clear notes
               </Button>
             </ROW>
             <ROW label="Sign out" hint="You will be returned to the home page">
-              <Button size="sm" variant="outline" onClick={() => { logout(); }}
+              <Button size="sm" variant="outline" onClick={async() => { const yes = await confirm({ title: 'Sign out?', message: 'You will be returned to the home page. Your data stays saved in this browser.', confirmLabel: t('confirm.signOut'), danger: false }); if (yes) logout(); }}
                 className="rounded-xl border-2 text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 text-xs gap-1.5">
                 Sign out
               </Button>
