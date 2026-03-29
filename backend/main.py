@@ -20,6 +20,7 @@ from routes_markschemes import router as ms_router
 from routes_downloads import router as downloads_router
 from routes_health import router as health_router
 from routes_ai import router as ai_router
+from routes_share import router as share_router
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
@@ -70,6 +71,7 @@ app.include_router(papers_router,    prefix="/api/papers",      tags=["papers"])
 app.include_router(ms_router,        prefix="/api/markschemes", tags=["markschemes"])
 app.include_router(downloads_router, prefix="/api/downloads",   tags=["downloads"])
 app.include_router(ai_router,        prefix="/api/ai",         tags=["ai"])
+app.include_router(share_router,     prefix="/api/share",      tags=["share"])
 
 
 @app.get("/", tags=["root"])
