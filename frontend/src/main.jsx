@@ -14,11 +14,13 @@ import Signup      from '@/pages/Signup';
 import Settings    from '@/pages/Settings';
 import AcademicHub from '@/pages/AcademicHub';
 import ASLevelHub  from '@/pages/ASLevelHub';
-import OLevelHub   from '@/pages/OLevelHub';
+import OLevelHub     from '@/pages/OLevelHub';
+import SharedNotes   from '@/pages/SharedNotes';
 import '@/index.css';
 import { I18nProvider } from '@/context/I18nContext';
 
 const NO_LAYOUT = ['/login', '/signup', '/onboarding'];
+const NO_LAYOUT_PREFIX = ['/shared/'];
 
 // Page wrapper with enter/exit animation
 function PageWrapper({ children }) {
@@ -71,7 +73,8 @@ function GlobalKeyNav() {
 function AppRoutes() {
   const location = useLocation();
   const { showOnboarding } = useAppContext();
-  const noLayout = NO_LAYOUT.includes(location.pathname);
+  const noLayout = NO_LAYOUT.includes(location.pathname) ||
+    NO_LAYOUT_PREFIX.some(p => location.pathname.startsWith(p));
 
   if (location.pathname === '/onboarding' && !showOnboarding) {
     return <Navigate to="/" replace />;
@@ -89,6 +92,7 @@ function AppRoutes() {
         <Route path="/AcademicHub"   element={<PageWrapper><AcademicHub /></PageWrapper>} />
         <Route path="/ASLevelHub"    element={<PageWrapper><ASLevelHub /></PageWrapper>} />
         <Route path="/OLevelHub"     element={<PageWrapper><OLevelHub /></PageWrapper>} />
+        <Route path="/shared/notes/:shareId" element={<SharedNotes />} />
         <Route path="/AcademicSuite" element={<Navigate to="/AcademicHub" replace />} />
         <Route path="/ASLevelSuite"  element={<Navigate to="/ASLevelHub"  replace />} />
         <Route path="/OLevelSuite"   element={<Navigate to="/OLevelHub"   replace />} />
@@ -112,3 +116,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   </AppProvider>
   </I18nProvider>
 );
+
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      .then(reg => console.info('[SW] Registered:', reg.scope))
+      .catch(err => console.warn('[SW] Failed:', err));
+  });
+}

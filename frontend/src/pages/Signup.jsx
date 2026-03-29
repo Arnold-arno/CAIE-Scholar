@@ -176,8 +176,9 @@ export default function Signup() {
           <motion.img src="/logo.png" alt="CAIE Scholar"
             className="w-48 h-48 object-contain drop-shadow-2xl"
             style={{ filter:'drop-shadow(0 0 60px rgba(59,130,246,0.6))' }}
-            initial={{opacity:0,scale:0.8}} animate={{opacity:1,scale:1}} transition={{duration:0.9}}
-            animate={{ y:[0,-10,0] }} transition={{ duration:5, repeat:Infinity, ease:'easeInOut' }}
+            initial={{opacity:0,scale:0.8,y:0}}
+            animate={{opacity:1,scale:1,y:[0,0,-10,0]}}
+            transition={{opacity:{duration:0.9},scale:{duration:0.9},y:{duration:5,repeat:Infinity,ease:'easeInOut',delay:1}}}
           />
           <div>
             <h1 className="text-4xl font-black"><span className="text-blue-400">CAIE</span><span className="text-red-400 ml-2">Scholar</span></h1>

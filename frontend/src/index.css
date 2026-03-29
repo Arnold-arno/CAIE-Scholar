@@ -227,6 +227,6 @@ html.dark [role="dialog"] {
   nav, footer, .no-print, button, [role="button"] { display: none !important; }
   body { background: white !important; color: #1e293b !important; }
   .bg-\[\#05071a\], .bg-\[#05071a\] { background: white !important; }
-  * { color-adjust: exact; -webkit-print-color-adjust: exact; }
+  * { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .print-section { page-break-inside: avoid; }
 }

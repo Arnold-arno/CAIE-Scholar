@@ -60,7 +60,7 @@ export default function OLevelHub() {
   const handleSearchSubject=useCallback(s=>{setSearchSubject(s.name);setTab('papers');setTimeout(()=>window.dispatchEvent(new CustomEvent('searchAgain',{detail:{subject:s.name,topic:'',autoSearch:true}})),150);},[]);
   const currentMeta=TAB_META[tab]||TAB_META.papers;
   return (
-    <motion.div initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.3}} className="min-h-screen bg-[#05071a]">
+    <motion.div initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.3}} className="min-h-screen bg-[#05071a] pb-16 md:pb-0">
       <div className="relative overflow-hidden bg-[#05071a]" style={{minHeight:'210px'}}>
         <div className="absolute inset-0">
           {cosmicStars.map(s=>(

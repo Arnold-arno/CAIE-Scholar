@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence, useMotionValue, useSpring } from 'framer-motion';
 import { Card, CardContent } from '@/components/ui/card';
+import ExamTimetable from '@/components/ui/exam-timetable';
 import { Button } from '@/components/ui/button';
 import { useAppContext } from '@/context/AppContext';
 
@@ -342,6 +343,8 @@ function Dashboard({ currentUser }) {
           </div>
         </motion.div>
       )}
+
+      <ExamTimetable />
 
       {/* Quick actions for new users with no active levels */}
       {activeLevels.length === 0 && (

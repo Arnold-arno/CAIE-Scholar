@@ -163,7 +163,7 @@ export default function AcademicHub() {
 
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.3}}
-      className="min-h-screen bg-[#05071a]">
+      className="min-h-screen bg-[#05071a] pb-16 md:pb-0">
 
       {/* ── Cosmic hero banner ── */}
       <div className="relative overflow-hidden bg-[#05071a]" style={{minHeight:'220px'}}>

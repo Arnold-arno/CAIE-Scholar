@@ -163,13 +163,12 @@ async function callAI(userContent, provider = 'claude') {
     const body = await res.text();
     throw new Error(`AI API (${provider}) ${res.status}: ${body.slice(0, 200)}`);
   }
-  }
-
-// Legacy alias so existing diagram code works unchanged
-const callClaude = (content) => callAI(content, 'claude');
   const data = await res.json();
   return (data.content || []).map(c => c.text || '').join('').trim();
 }
+
+// Legacy alias so existing diagram code works unchanged
+const callClaude = (content) => callAI(content, 'claude');
 
 // ── Prompts ───────────────────────────────────────────────────────────────────
 function buildNotesPrompt(subject, topic, examType) {
