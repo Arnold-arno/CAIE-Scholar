@@ -333,7 +333,7 @@ export default function Settings() {
               </Button>
             </ROW>
             <ROW label="Sign out" hint="You will be returned to the home page">
-              <Button size="sm" variant="outline" onClick={async() => { const yes = await confirm({ title: 'Sign out?', message: 'You will be returned to the home page. Your data stays saved in this browser.', confirmLabel: t('confirm.signOut'), danger: false }); if (yes) logout(); }}
+              <Button size="sm" variant="outline" onClick={async() => { const yes = await confirm({ title: 'Sign out?', message: 'You will be returned to the home page. Your data stays saved in this browser.', confirmLabel: t('confirm.signOut'), danger: false, icon: 'signout' }); if (yes) logout(); }}
                 className="rounded-xl border-2 text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 text-xs gap-1.5">
                 Sign out
               </Button>

@@ -18,11 +18,20 @@ export default defineConfig({
       },
     },
   },
+  optimizeDeps: {
+    // These are optional peer deps — only needed if VITE_AUTH_PROVIDER=supabase/firebase
+    // Don't fail the build if they are absent
+    exclude: ['@supabase/supabase-js', 'firebase', 'firebase/app', 'firebase/auth'],
+  },
   build: {
     outDir: 'dist',
     sourcemap: false,
-    // No manualChunks — let Vite split automatically.
-    // Manual chunks cause build failures when a declared package
-    // doesn't resolve (e.g. was removed or renamed).
+    rollupOptions: {
+      // Mark optional peer deps as external so Rollup never tries to bundle them.
+      // They are loaded at runtime only when VITE_AUTH_PROVIDER=supabase|firebase.
+      external: (id) => {
+        return id.startsWith('@supabase/') || id.startsWith('firebase');
+      },
+    },
   },
 });

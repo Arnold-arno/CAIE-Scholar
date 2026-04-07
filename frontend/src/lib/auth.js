@@ -71,7 +71,7 @@ let _sb = null;
 async function getSB() {
   if (_sb) return _sb;
   try {
-    const { createClient } = await import('@supabase/supabase-js');
+    const { createClient } = await import(/* @vite-ignore */ '@supabase/supabase-js');
     const url = import.meta.env.VITE_SUPABASE_URL;
     const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
     if (!url || !key) throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY');
@@ -166,8 +166,8 @@ let _fbAuth = null;
 async function getFB() {
   if (_fbAuth) return _fbAuth;
   try {
-    const { initializeApp, getApps } = await import('firebase/app');
-    const { getAuth } = await import('firebase/auth');
+    const { initializeApp, getApps } = await import(/* @vite-ignore */ 'firebase/app');
+    const { getAuth } = await import(/* @vite-ignore */ 'firebase/auth');
     const cfg = {
       apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
       authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -190,7 +190,7 @@ const firebaseAdapter = {
   async signIn(email, password) {
     const auth = await getFB();
     if (!auth) return { user: null, error: 'Firebase not configured' };
-    const { signInWithEmailAndPassword } = await import('firebase/auth');
+    const { signInWithEmailAndPassword } = await import(/* @vite-ignore */ 'firebase/auth');
     try {
       const cred = await signInWithEmailAndPassword(auth, email, password);
       return { user: { id: cred.user.uid, email: cred.user.email, name: cred.user.displayName || email.split('@')[0] }, error: null };
@@ -200,7 +200,7 @@ const firebaseAdapter = {
   async signUp(name, email, password) {
     const auth = await getFB();
     if (!auth) return { user: null, error: 'Firebase not configured' };
-    const { createUserWithEmailAndPassword, updateProfile } = await import('firebase/auth');
+    const { createUserWithEmailAndPassword, updateProfile } = await import(/* @vite-ignore */ 'firebase/auth');
     try {
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(cred.user, { displayName: name });
@@ -211,7 +211,7 @@ const firebaseAdapter = {
   async signOut() {
     const auth = await getFB();
     if (!auth) return { error: null };
-    const { signOut } = await import('firebase/auth');
+    const { signOut } = await import(/* @vite-ignore */ 'firebase/auth');
     try { await signOut(auth); return { error: null }; }
     catch (e) { return { error: e.message }; }
   },
@@ -219,7 +219,7 @@ const firebaseAdapter = {
   async sendOTP(email) {
     const auth = await getFB();
     if (!auth) return { error: 'Firebase not configured' };
-    const { sendSignInLinkToEmail } = await import('firebase/auth');
+    const { sendSignInLinkToEmail } = await import(/* @vite-ignore */ 'firebase/auth');
     try {
       await sendSignInLinkToEmail(auth, email, {
         url: `${window.location.origin}/verify-email`,
@@ -235,7 +235,7 @@ const firebaseAdapter = {
   async resetPassword(email) {
     const auth = await getFB();
     if (!auth) return { error: 'Firebase not configured' };
-    const { sendPasswordResetEmail } = await import('firebase/auth');
+    const { sendPasswordResetEmail } = await import(/* @vite-ignore */ 'firebase/auth');
     try { await sendPasswordResetEmail(auth, email); return { error: null }; }
     catch (e) { return { error: e.message }; }
   },
@@ -243,7 +243,7 @@ const firebaseAdapter = {
   async checkExists(email) {
     const auth = await getFB();
     if (!auth) return { exists: false, error: null };
-    const { fetchSignInMethodsForEmail } = await import('firebase/auth');
+    const { fetchSignInMethodsForEmail } = await import(/* @vite-ignore */ 'firebase/auth');
     try {
       const methods = await fetchSignInMethodsForEmail(auth, email);
       return { exists: methods.length > 0, error: null };
@@ -254,7 +254,7 @@ const firebaseAdapter = {
     let unsub = () => {};
     getFB().then(auth => {
       if (!auth) return;
-      import('firebase/auth').then(({ onAuthStateChanged }) => {
+      import(/* @vite-ignore */ 'firebase/auth').then(({ onAuthStateChanged }) => {
         unsub = onAuthStateChanged(auth, user => {
           callback(user ? { id: user.uid, email: user.email, name: user.displayName || user.email.split('@')[0] } : null);
         });
