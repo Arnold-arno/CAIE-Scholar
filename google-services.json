@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "81146985308",
+    "project_id": "caie-scholar",
+    "storage_bucket": "caie-scholar.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:81146985308:android:5508bff310dd0281541f99",
+        "android_client_info": {
+          "package_name": "arno.katz.CAIE_Scholar"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCEz_Tp31kbZfhEIhM9uV6zMmFMux01G7A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
