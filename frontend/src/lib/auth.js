@@ -1,28 +1,27 @@
 /**
  * auth.js — Authentication adapter.
  *
- * Set VITE_AUTH_PROVIDER in frontend/.env:
- *   'stub'     — localStorage only, any email works (default)
- *   'supabase' — Supabase Auth (VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY)
- *   'firebase' — Firebase Auth  (VITE_FIREBASE_API_KEY + VITE_FIREBASE_AUTH_DOMAIN + VITE_FIREBASE_PROJECT_ID)
+ * VITE_AUTH_PROVIDER in frontend/.env:
+ *   'stub'     — localStorage (default, works with no backend, any password accepted)
+ *   'firebase' — Firebase Auth (requires VITE_FIREBASE_API_KEY etc.)
  *
- * All methods return { user?, error? } — callers handle both paths uniformly.
+ * All public methods return { user?, error? }.
  * user shape: { id, email, name }
  */
 
 const AUTH_PROVIDER = import.meta.env.VITE_AUTH_PROVIDER || 'stub';
 
-// ─── Stub (default, no backend needed) ───────────────────────────────────────
+// ─── Stub ────────────────────────────────────────────────────────────────────
 const stub = {
   async signIn(email, _password) {
-    const stored = (() => {
-      try { return JSON.parse(localStorage.getItem(`caie_acct_${btoa(email)}`)); } catch { return null; }
-    })();
-    if (stored) return { user: stored, error: null };
-    // Auto-create on first sign-in (stub behaviour)
-    const user = { id: `stub_${Date.now()}`, email, name: email.split('@')[0] };
-    try { localStorage.setItem(`caie_acct_${btoa(email)}`, JSON.stringify(user)); } catch {}
-    return { user, error: null };
+    try {
+      const raw = localStorage.getItem(`caie_acct_${btoa(email)}`);
+      if (raw) return { user: JSON.parse(raw), error: null };
+      // Auto-create first time (stub behaviour — no real password check)
+      const user = { id: `stub_${Date.now()}`, email, name: email.split('@')[0] };
+      localStorage.setItem(`caie_acct_${btoa(email)}`, JSON.stringify(user));
+      return { user, error: null };
+    } catch { return { user: null, error: 'Sign in failed' }; }
   },
 
   async signUp(name, email, _password) {
@@ -44,129 +43,35 @@ const stub = {
   },
 
   async resetPassword(email) {
-    // Stub: just return success — show the user a toast saying "email sent"
-    console.info(`[Auth stub] Password reset requested for ${email}`);
+    console.info(`[Auth stub] Reset requested for ${email}`);
     return { error: null };
   },
 
   async checkExists(email) {
-    const stored = (() => {
-      try { return localStorage.getItem(`caie_acct_${btoa(email)}`); } catch { return null; }
-    })();
-    return { exists: !!stored, error: null };
+    try {
+      const exists = !!localStorage.getItem(`caie_acct_${btoa(email)}`);
+      return { exists, error: null };
+    } catch { return { exists: false, error: null }; }
   },
 
   onAuthStateChange(callback) {
     try {
       const raw = localStorage.getItem('current_user');
-      const loggedIn = localStorage.getItem('is_logged_in') === 'true';
-      if (raw && loggedIn) callback(JSON.parse(raw));
+      if (raw && localStorage.getItem('is_logged_in') === 'true') callback(JSON.parse(raw));
     } catch {}
     return { unsubscribe: () => {} };
   },
 };
 
-// ─── Supabase ─────────────────────────────────────────────────────────────────
-let _sb = null;
-async function getSB() {
-  if (_sb) return _sb;
-  try {
-    const { createClient } = await import(/* @vite-ignore */ '@supabase/supabase-js');
-    const url = import.meta.env.VITE_SUPABASE_URL;
-    const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
-    if (!url || !key) throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY');
-    _sb = createClient(url, key);
-    return _sb;
-  } catch (e) {
-    console.error('[Auth] Supabase init failed:', e.message);
-    return null;
-  }
-}
-
-const supabaseAdapter = {
-  async signIn(email, password) {
-    const sb = await getSB();
-    if (!sb) return { user: null, error: 'Supabase not configured' };
-    const { data, error } = await sb.auth.signInWithPassword({ email, password });
-    if (error) return { user: null, error: error.message };
-    return { user: { id: data.user.id, email: data.user.email, name: data.user.user_metadata?.name || email.split('@')[0] }, error: null };
-  },
-
-  async signUp(name, email, password) {
-    const sb = await getSB();
-    if (!sb) return { user: null, error: 'Supabase not configured' };
-    const { data, error } = await sb.auth.signUp({ email, password, options: { data: { name } } });
-    if (error) return { user: null, error: error.message };
-    return { user: { id: data.user?.id, email, name }, error: null };
-  },
-
-  async signOut() {
-    const sb = await getSB();
-    if (!sb) return { error: null };
-    const { error } = await sb.auth.signOut();
-    return { error: error?.message || null };
-  },
-
-  async sendOTP(email) {
-    const sb = await getSB();
-    if (!sb) return { error: 'Supabase not configured' };
-    const { error } = await sb.auth.signInWithOtp({ email });
-    return { code: null, error: error?.message || null };
-  },
-
-  async verifyOTP(email, token) {
-    const sb = await getSB();
-    if (!sb) return { verified: false, error: 'Supabase not configured' };
-    const { data, error } = await sb.auth.verifyOtp({ email, token, type: 'email' });
-    return { verified: !error, user: data?.user || null, error: error?.message || null };
-  },
-
-  async resetPassword(email) {
-    const sb = await getSB();
-    if (!sb) return { error: 'Supabase not configured' };
-    const { error } = await sb.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-    return { error: error?.message || null };
-  },
-
-  async checkExists(email) {
-    // Supabase doesn't expose a "does email exist" endpoint publicly for security.
-    // We attempt sign-in with a dummy password — a specific error message tells us
-    // whether the account exists (wrong password) vs doesn't exist (user not found).
-    const sb = await getSB();
-    if (!sb) return { exists: false, error: null };
-    const { error } = await sb.auth.signInWithPassword({ email, password: '##CHECK_ONLY##' });
-    const msg = error?.message?.toLowerCase() || '';
-    if (msg.includes('invalid login') || msg.includes('wrong password') || msg.includes('invalid credentials')) {
-      return { exists: true, error: null };
-    }
-    return { exists: false, error: null };
-  },
-
-  onAuthStateChange(callback) {
-    let unsub = () => {};
-    getSB().then(sb => {
-      if (!sb) return;
-      const { data } = sb.auth.onAuthStateChange((_event, session) => {
-        callback(session?.user ? {
-          id: session.user.id,
-          email: session.user.email,
-          name: session.user.user_metadata?.name || session.user.email.split('@')[0],
-        } : null);
-      });
-      unsub = data.subscription.unsubscribe;
-    });
-    return { unsubscribe: () => unsub() };
-  },
-};
-
-// ─── Firebase ─────────────────────────────────────────────────────────────────
+// ─── Firebase ────────────────────────────────────────────────────────────────
+// Lazily initialised — only runs when VITE_AUTH_PROVIDER=firebase
 let _fbAuth = null;
+
 async function getFB() {
   if (_fbAuth) return _fbAuth;
   try {
-    const { initializeApp, getApps } = await import(/* @vite-ignore */ 'firebase/app');
+    // Dynamic imports with @vite-ignore prevent Rollup resolving at build time
+    const { initializeApp, getApps, getApp } = await import(/* @vite-ignore */ 'firebase/app');
     const { getAuth } = await import(/* @vite-ignore */ 'firebase/auth');
     const cfg = {
       apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
@@ -176,8 +81,8 @@ async function getFB() {
       messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
       appId:             import.meta.env.VITE_FIREBASE_APP_ID,
     };
-    if (!cfg.apiKey) throw new Error('Missing VITE_FIREBASE_API_KEY');
-    const app = getApps().length ? getApps()[0] : initializeApp(cfg);
+    if (!cfg.apiKey) throw new Error('VITE_FIREBASE_API_KEY is not set');
+    const app = getApps().length ? getApp() : initializeApp(cfg);
     _fbAuth = getAuth(app);
     return _fbAuth;
   } catch (e) {
@@ -189,12 +94,23 @@ async function getFB() {
 const firebaseAdapter = {
   async signIn(email, password) {
     const auth = await getFB();
-    if (!auth) return { user: null, error: 'Firebase not configured' };
+    if (!auth) return { user: null, error: 'Firebase not configured — check VITE_FIREBASE_API_KEY' };
     const { signInWithEmailAndPassword } = await import(/* @vite-ignore */ 'firebase/auth');
     try {
-      const cred = await signInWithEmailAndPassword(auth, email, password);
-      return { user: { id: cred.user.uid, email: cred.user.email, name: cred.user.displayName || email.split('@')[0] }, error: null };
-    } catch (e) { return { user: null, error: e.message }; }
+      const { user } = await signInWithEmailAndPassword(auth, email, password);
+      return { user: { id: user.uid, email: user.email, name: user.displayName || email.split('@')[0] }, error: null };
+    } catch (e) {
+      // Map Firebase error codes to friendly messages
+      const msg = {
+        'auth/user-not-found':   'No account found with that email.',
+        'auth/wrong-password':   'Incorrect password.',
+        'auth/invalid-email':    'Invalid email address.',
+        'auth/user-disabled':    'This account has been disabled.',
+        'auth/too-many-requests':'Too many attempts. Please wait before trying again.',
+        'auth/invalid-credential':'Incorrect email or password.',
+      }[e.code] || e.message;
+      return { user: null, error: msg };
+    }
   },
 
   async signUp(name, email, password) {
@@ -202,10 +118,17 @@ const firebaseAdapter = {
     if (!auth) return { user: null, error: 'Firebase not configured' };
     const { createUserWithEmailAndPassword, updateProfile } = await import(/* @vite-ignore */ 'firebase/auth');
     try {
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
-      await updateProfile(cred.user, { displayName: name });
-      return { user: { id: cred.user.uid, email, name }, error: null };
-    } catch (e) { return { user: null, error: e.message }; }
+      const { user } = await createUserWithEmailAndPassword(auth, email, password);
+      await updateProfile(user, { displayName: name });
+      return { user: { id: user.uid, email, name }, error: null };
+    } catch (e) {
+      const msg = {
+        'auth/email-already-in-use': 'An account with this email already exists.',
+        'auth/weak-password':        'Password must be at least 6 characters.',
+        'auth/invalid-email':        'Invalid email address.',
+      }[e.code] || e.message;
+      return { user: null, error: msg };
+    }
   },
 
   async signOut() {
@@ -217,27 +140,42 @@ const firebaseAdapter = {
   },
 
   async sendOTP(email) {
+    // Firebase doesn't support numeric OTP natively.
+    // We use Email Link (passwordless) — user clicks the link to verify.
     const auth = await getFB();
-    if (!auth) return { error: 'Firebase not configured' };
+    if (!auth) return { code: null, error: 'Firebase not configured' };
     const { sendSignInLinkToEmail } = await import(/* @vite-ignore */ 'firebase/auth');
     try {
       await sendSignInLinkToEmail(auth, email, {
         url: `${window.location.origin}/verify-email`,
         handleCodeInApp: true,
       });
-      localStorage.setItem('emailForSignIn', email);
+      localStorage.setItem('caie_emailForSignIn', email);
+      // No numeric code — verification happens via the email link
       return { code: null, error: null };
     } catch (e) { return { code: null, error: e.message }; }
   },
 
-  async verifyOTP(_email, _token) { return { verified: true, error: null }; },
+  async verifyOTP(_email, _token) {
+    // When using Firebase Email Link, verification happens automatically
+    // when the user clicks the link. We optimistically allow continuation here.
+    return { verified: true, error: null };
+  },
 
   async resetPassword(email) {
     const auth = await getFB();
     if (!auth) return { error: 'Firebase not configured' };
     const { sendPasswordResetEmail } = await import(/* @vite-ignore */ 'firebase/auth');
-    try { await sendPasswordResetEmail(auth, email); return { error: null }; }
-    catch (e) { return { error: e.message }; }
+    try {
+      await sendPasswordResetEmail(auth, email);
+      return { error: null };
+    } catch (e) {
+      const msg = {
+        'auth/user-not-found': 'No account found with that email.',
+        'auth/invalid-email':  'Invalid email address.',
+      }[e.code] || e.message;
+      return { error: msg };
+    }
   },
 
   async checkExists(email) {
@@ -256,7 +194,10 @@ const firebaseAdapter = {
       if (!auth) return;
       import(/* @vite-ignore */ 'firebase/auth').then(({ onAuthStateChanged }) => {
         unsub = onAuthStateChanged(auth, user => {
-          callback(user ? { id: user.uid, email: user.email, name: user.displayName || user.email.split('@')[0] } : null);
+          callback(user
+            ? { id: user.uid, email: user.email, name: user.displayName || user.email.split('@')[0] }
+            : null
+          );
         });
       });
     });
@@ -264,10 +205,19 @@ const firebaseAdapter = {
   },
 };
 
-// ─── Export ───────────────────────────────────────────────────────────────────
-const ADAPTERS = { stub, supabase: supabaseAdapter, firebase: firebaseAdapter };
-export const authProvider = ADAPTERS[AUTH_PROVIDER] || stub;
+// ─── Select and export ────────────────────────────────────────────────────────
+export const authProvider = AUTH_PROVIDER === 'firebase' ? firebaseAdapter : stub;
 
-export const { signIn, signUp, signOut, sendOTP, verifyOTP, resetPassword, checkExists, onAuthStateChange } = authProvider;
+export const {
+  signIn,
+  signUp,
+  signOut,
+  sendOTP,
+  verifyOTP,
+  resetPassword,
+  checkExists,
+  onAuthStateChange,
+} = authProvider;
+
 export const activeProvider = AUTH_PROVIDER;
-export const isRealAuth = AUTH_PROVIDER !== 'stub';
+export const isRealAuth     = AUTH_PROVIDER === 'firebase';
