@@ -263,8 +263,7 @@ ${qs}
               {Object.keys(subjects).sort().map(s => {
                 const code = typeof subjects[s] === 'object' ? subjects[s].code : subjects[s];
                 return <option key={s} value={s}>{s} — {code}</option>;
-              }
-              ))}
+              })}
             </select>
           </div>
 
